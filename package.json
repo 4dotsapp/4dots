@@ -1,0 +1,21 @@
+{
+  "name": "4dots",
+  "version": "1.0.0",
+  "private": true,
+  "description": "End-to-end encrypted sharing for text, images and files with four-digit codes, on Cloudflare Workers and nimbo.fun.",
+  "homepage": "https://4dots.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/4dotsapp/4dots.git"
+  },
+  "bugs": "https://github.com/4dotsapp/4dots/issues",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "node dev/dev.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}

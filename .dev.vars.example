@@ -1,0 +1,3 @@
+# Copy to .dev.vars for `npx wrangler dev` against real nimbo storage.
+# In production, set it with `npx wrangler secret put NIMBO_TOKEN` instead.
+NIMBO_TOKEN=

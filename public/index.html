@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>4dots — share anything with four digits</title>
+  <meta name="description" content="End-to-end encrypted sharing for text, images and files. No accounts, just a four-digit code.">
+  <meta property="og:title" content="4dots">
+  <meta property="og:description" content="Send a note or a file. Open it with four digits.">
+  <meta property="og:image" content="https://4dots.app/og.png">
+  <meta property="og:url" content="https://4dots.app/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0c0c0b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ebe9e4" media="(prefers-color-scheme: light)">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <!-- Icon sprite + home for the SVG filters that drive motion blur and refraction -->
+  <svg id="fx" class="fx" aria-hidden="true" focusable="false">
+    <symbol id="i-github" viewBox="0 0 16 16"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="3"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></symbol>
+    <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="3"/><path d="M8 10.5V7.5a4 4 0 0 1 7.6-1.7"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M7.5 18.5a4.5 4.5 0 0 1-.9-8.9 5.8 5.8 0 0 1 11.2-.9 4.1 4.1 0 0 1-.3 8.2"/><path d="M12 12.5v8"/><path d="m9 15.5 3-3 3 3"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.8"/><path d="M15 9V6.8A2.8 2.8 0 0 0 12.2 4H6.8A2.8 2.8 0 0 0 4 6.8v5.4A2.8 2.8 0 0 0 6.8 15H9"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3.5"/><path d="m8 7.5 4-4 4 4"/><path d="M6 11.5H5.5v7A2.5 2.5 0 0 0 8 21h8a2.5 2.5 0 0 0 2.5-2.5v-7H18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 10 17.5 19 7"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3c.6 3.6 5.5 5.6 5.5 10.6a5.5 5.5 0 0 1-11 0c0-2.3 1-3.9 2.3-5 0 1.7.8 2.8 2 3.3-.3-3.5.2-6.4 1.2-8.9z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.5 7h15"/><path d="M9.5 7V4.8h5V7"/><path d="m6.5 7 .9 12.2a1.5 1.5 0 0 0 1.5 1.3h6.2a1.5 1.5 0 0 0 1.5-1.3L17.5 7"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5"/><path d="M12 16.2h.01"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5.5"/><path d="m11 6-6 6 6 6"/></symbol>
+  </svg>
+
+  <div class="backdrop" aria-hidden="true">
+    <div class="ticker">
+      <div class="track"></div>
+      <div class="track"></div>
+    </div>
+    <div class="grain"></div>
+  </div>
+
+  <div class="shell">
+    <header class="top">
+      <a class="brand reveal" href="/" aria-label="4dots, home">
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="6.5" cy="6.5" r="4.5"/><circle cx="17.5" cy="6.5" r="4.5"/>
+          <circle cx="6.5" cy="17.5" r="4.5"/><circle class="hot" cx="17.5" cy="17.5" r="4.5"/>
+        </svg>
+        <span>4dots</span>
+      </a>
+      <a class="badge glass reveal" href="https://github.com/4dotsapp/4dots" target="_blank" rel="noopener noreferrer"><svg class="i solid" aria-hidden="true"><use href="#i-github"/></svg>View on GitHub</a>
+    </header>
+
+    <section class="hero">
+      <h1 class="reveal d1">Send a note or a file.<br><span>Open it with four digits.</span></h1>
+    </section>
+
+    <nav class="seg glass reveal d2" role="tablist" aria-label="Mode">
+      <span class="seg-thumb" aria-hidden="true"></span>
+      <button type="button" role="tab" id="tab-send" data-tab="send" aria-selected="true" aria-controls="card">Send</button>
+      <button type="button" role="tab" id="tab-receive" data-tab="receive" aria-selected="false" aria-controls="card" tabindex="-1">Receive</button>
+    </nav>
+
+    <main class="card glass reveal d3" id="card" role="tabpanel" aria-labelledby="tab-send">
+      <div class="viewport">
+
+        <!-- Send: compose -->
+        <section class="view active" data-view="send-compose">
+          <label class="sr-only" for="note">Message</label>
+          <textarea id="note" class="note" rows="4" placeholder="Write a message, paste a link, a password…" spellcheck="false"></textarea>
+
+          <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-describedby="limit-text">
+            <span class="dz-icon"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg></span>
+            <span class="dz-text">
+              <strong>Add files or images</strong>
+              <small id="limit-text"><span class="wide-only">Drop, paste or <u>browse</u></span><span class="narrow-only">Tap to <u>browse</u></span> · up to <span data-limit>1 GB</span></small>
+            </span>
+          </div>
+          <input type="file" id="file-input" multiple hidden>
+          <ul class="files" id="files" aria-label="Attached files"></ul>
+
+          <div class="options">
+            <div class="option">
+              <span class="option-label"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg><span>Expires<span class="wide-only"> after</span></span></span>
+              <div class="chips" role="radiogroup" aria-label="Expires after">
+                <button type="button" role="radio" aria-checked="false" data-ttl="600" tabindex="-1">10 min</button>
+                <button type="button" role="radio" aria-checked="true" data-ttl="3600">1 hour</button>
+                <button type="button" role="radio" aria-checked="false" data-ttl="86400" tabindex="-1">1 day</button>
+              </div>
+            </div>
+            <label class="option" for="burn">
+              <span class="option-label"><svg class="i" aria-hidden="true"><use href="#i-flame"/></svg>Burn after first open</span>
+              <input type="checkbox" class="switch" id="burn" role="switch" checked>
+            </label>
+          </div>
+
+          <button type="button" class="btn btn-primary" id="send-btn" disabled>
+            <svg class="i" aria-hidden="true"><use href="#i-lock"/></svg><span>Encrypt &amp; get code</span>
+          </button>
+          <p class="hint" id="compose-hint">Nothing is uploaded until you tap the button.</p>
+        </section>
+
+        <!-- Send: working -->
+        <section class="view" data-view="send-progress" aria-live="polite">
+          <div class="progress">
+            <div class="loader" aria-hidden="true"></div>
+            <h2 class="progress-title">Reserving a code</h2>
+            <p class="progress-sub">&nbsp;</p>
+            <div class="bar indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><span></span></div>
+          </div>
+        </section>
+
+        <!-- Send: done -->
+        <section class="view" data-view="send-done">
+          <div class="done">
+            <p class="eyebrow">Your code</p>
+            <div class="code" id="code" role="img" aria-label="">
+              <div class="reel"><div class="window"><div class="strip"></div></div></div>
+              <div class="reel"><div class="window"><div class="strip"></div></div></div>
+              <div class="reel"><div class="window"><div class="strip"></div></div></div>
+              <div class="reel"><div class="window"><div class="strip"></div></div></div>
+            </div>
+            <div class="meta-row">
+              <span class="pill"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg><span id="send-expiry">Expires soon</span></span>
+              <span class="pill burn" id="send-burn"><svg class="i" aria-hidden="true"><use href="#i-flame"/></svg>Burns once opened</span>
+            </div>
+            <div class="actions">
+              <button type="button" class="btn btn-glass" data-action="copy-code"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy code</button>
+              <button type="button" class="btn btn-glass" data-action="copy-link"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Copy link</button>
+              <button type="button" class="btn btn-glass" data-action="share" hidden><svg class="i" aria-hidden="true"><use href="#i-share"/></svg>Share</button>
+            </div>
+            <div class="subactions">
+              <button type="button" class="text-btn danger" data-action="revoke"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg><span>Delete now</span></button>
+              <button type="button" class="text-btn" data-action="new-drop"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New drop</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Receive: enter code -->
+        <section class="view" data-view="receive-enter">
+          <div class="enter">
+            <p class="eyebrow" id="pin-label">Enter the code</p>
+            <div class="pin" id="pin" role="group" aria-labelledby="pin-label">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" placeholder="•" aria-label="Digit 1">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 2">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 3">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 4">
+            </div>
+            <p class="pin-msg" id="pin-msg" aria-live="assertive"></p>
+            <button type="button" class="btn btn-primary" id="open-btn" disabled>
+              <svg class="i" aria-hidden="true"><use href="#i-unlock"/></svg><span>Unlock</span>
+            </button>
+            <p class="hint">Decryption happens on this device. Burn-after-reading drops vanish once opened.</p>
+          </div>
+        </section>
+
+        <!-- Receive: working -->
+        <section class="view" data-view="receive-progress" aria-live="polite">
+          <div class="progress">
+            <div class="loader" aria-hidden="true"></div>
+            <h2 class="progress-title">Finding your drop</h2>
+            <p class="progress-sub">&nbsp;</p>
+            <div class="bar indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><span></span></div>
+          </div>
+        </section>
+
+        <!-- Receive: result -->
+        <section class="view" data-view="receive-result">
+          <div class="result-head">
+            <span class="check-orb"><svg class="i" aria-hidden="true"><use href="#i-check"/></svg></span>
+            <div>
+              <h2>Unlocked</h2>
+              <p class="muted" id="result-meta"></p>
+            </div>
+          </div>
+          <div class="result-body" id="result-body"></div>
+          <button type="button" class="btn btn-glass wide" data-action="receive-again"><svg class="i" aria-hidden="true"><use href="#i-back"/></svg>Open another code</button>
+        </section>
+
+      </div>
+    </main>
+
+    <footer class="foot">
+      <details class="how glass reveal d4">
+        <summary>How it works<svg class="i" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+        <div class="how-body">
+          <ol>
+            <li><span><strong>You get a code.</strong> The server reserves a free four-digit code for your drop.</span></li>
+            <li><span><strong>Your browser encrypts.</strong> Everything is sealed with AES-256-GCM under a key derived from the code (PBKDF2, 600k rounds) and a server-side secret. Only ciphertext is uploaded.</span></li>
+            <li><span><strong>They enter the code.</strong> Their browser downloads the ciphertext and decrypts it locally. Storage never sees your content or your code.</span></li>
+          </ol>
+          <p class="caveat">Four digits are quick to share but also quick to guess, so drops expire, can burn after one open, and wrong guesses are rate-limited. Use it for things that matter for minutes, not secrets that must stay secret forever.</p>
+        </div>
+      </details>
+      <p class="fine reveal d4">AES-256-GCM in your browser · stored on <a href="https://nimbo.fun" target="_blank" rel="noopener noreferrer">nimbo.fun</a></p>
+    </footer>
+  </div>
+
+  <div class="drag-overlay" id="drag-overlay" hidden>
+    <div class="drag-card glass">
+      <svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>
+      <strong>Drop to add</strong>
+      <small>Encrypted before it leaves this device</small>
+    </div>
+  </div>
+
+  <div class="toast glass" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
