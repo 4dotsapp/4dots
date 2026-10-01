@@ -333,7 +333,8 @@ a.badge:hover .i {
 }
 
 .hero {
-  padding: 6px 2px 4px;
+  margin-top: -2px;
+  padding: 0 2px 4px;
 }
 
 .hero h1 {
