@@ -2,6 +2,7 @@ import { bundle, unbundle, seal, unseal } from './crypto.js';
 import { ease, motionBlur, prefersReducedMotion, rollDigits, tween } from './motion.js';
 import { lens } from './lens.js';
 import { liquidSlider } from './slider.js';
+import { qrSvg } from './qr.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TABS = ['send', 'receive'];
@@ -761,6 +762,9 @@ card.addEventListener('click', (event) => {
     case 'share':
       navigator.share({ title: '4dots', text: `Your 4dots code is ${code}`, url: link }).catch(() => {});
       break;
+    case 'qr':
+      showQr(code, link);
+      break;
     case 'revoke':
       revoke(button);
       break;
@@ -773,6 +777,38 @@ card.addEventListener('click', (event) => {
       });
       break;
   }
+});
+
+/* ───────────── QR code ───────────── */
+
+const qrOverlay = $('#qr-overlay');
+let qrOpener = null;
+
+function showQr(code, link) {
+  $('#qr-tile').replaceChildren(qrSvg(link, `QR code for ${link}`));
+  $('#qr-digits').textContent = code;
+  $('#qr-host').textContent = location.host;
+  qrOpener = document.activeElement;
+  qrOverlay.classList.remove('closing');
+  qrOverlay.hidden = false;
+  $('[data-close]', qrOverlay).focus({ preventScroll: true });
+}
+
+function hideQr() {
+  if (qrOverlay.hidden || qrOverlay.classList.contains('closing')) return;
+  qrOverlay.classList.add('closing');
+  setTimeout(() => {
+    qrOverlay.hidden = true;
+    qrOverlay.classList.remove('closing');
+    qrOpener?.focus({ preventScroll: true });
+  }, 160);
+}
+
+qrOverlay.addEventListener('click', (event) => {
+  if (event.target === qrOverlay || event.target.closest('[data-close]')) hideQr();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') hideQr();
 });
 
 /* ───────────── drag, drop, paste, keys ───────────── */

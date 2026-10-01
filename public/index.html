@@ -115,6 +115,7 @@
     <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.8v5"/><path d="M12 16.2h.01"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></symbol>
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5.5"/><path d="m11 6-6 6 6 6"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><path d="M14 14h2.5v2.5"/><path d="M20 14v.01"/><path d="M14 20h2.5"/><path d="M20 17.5V20h-.01"/></symbol>
   </svg>
 
   <div class="backdrop" aria-hidden="true">
@@ -215,6 +216,7 @@
               <button type="button" class="btn btn-glass" data-action="copy-code"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy code</button>
               <button type="button" class="btn btn-glass" data-action="copy-link"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Copy link</button>
               <button type="button" class="btn btn-glass" data-action="share" hidden><svg class="i" aria-hidden="true"><use href="#i-share"/></svg>Share</button>
+              <button type="button" class="btn btn-glass" data-action="qr"><svg class="i" aria-hidden="true"><use href="#i-qr"/></svg>QR code</button>
             </div>
             <div class="subactions">
               <button type="button" class="text-btn danger" data-action="revoke"><svg class="i" aria-hidden="true"><use href="#i-trash"/></svg><span>Delete now</span></button>
@@ -288,6 +290,15 @@
       <svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>
       <strong>Drop to add</strong>
       <small>Encrypted before it leaves this device</small>
+    </div>
+  </div>
+
+  <div class="qr-overlay" id="qr-overlay" hidden>
+    <div class="qr-card glass" role="dialog" aria-modal="true" aria-labelledby="qr-title">
+      <p class="eyebrow" id="qr-title">Scan to open</p>
+      <div class="qr-tile" id="qr-tile"></div>
+      <p class="qr-note">or enter <strong id="qr-digits"></strong> at <span id="qr-host"></span></p>
+      <button type="button" class="btn btn-glass wide" data-close>Done</button>
     </div>
   </div>
 

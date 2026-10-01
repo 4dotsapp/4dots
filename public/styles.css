@@ -1060,6 +1060,11 @@ label.option {
   width: 100%;
 }
 
+/* The QR code is for showing a phone to someone else, so it only appears on small screens. */
+.actions [data-action="qr"] {
+  display: none;
+}
+
 .subactions {
   display: flex;
   justify-content: center;
@@ -1430,6 +1435,69 @@ label.option {
 }
 
 @keyframes fade { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+
+.qr-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(12 12 11 / 0.35);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  animation: fade 0.2s ease both;
+}
+
+.qr-overlay.closing {
+  animation: fade-out 0.16s ease both;
+}
+
+.qr-card {
+  display: grid;
+  justify-items: center;
+  width: min(100%, 320px);
+  padding: 24px 22px 22px;
+  border-radius: 32px;
+  text-align: center;
+  animation: rise 0.45s var(--spring) both;
+}
+
+.qr-card .eyebrow {
+  margin-bottom: 16px;
+}
+
+/* Dark on white in both themes: cameras read that best. */
+.qr-tile {
+  width: 100%;
+  max-width: 236px;
+  aspect-ratio: 1;
+  padding: 6px;
+  border-radius: 22px;
+  background: #fff;
+  color: #0c0c0b;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06), 0 14px 30px -16px rgb(0 0 0 / 0.6);
+}
+
+.qr-tile svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+.qr-note {
+  margin: 16px 0 18px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.qr-note strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
 
 .toast {
   position: fixed;
@@ -1527,6 +1595,14 @@ label.option {
 
   .chips button {
     padding: 0 10px;
+  }
+
+  .actions [data-action="qr"] {
+    display: inline-flex;
+  }
+
+  .actions:has(> [data-action="share"][hidden]) > [data-action="qr"] {
+    grid-column: 1 / -1;
   }
 }
 
