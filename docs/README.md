@@ -125,6 +125,7 @@ Icons live in [`docs/brand`](brand): the app icon with and without rounded corne
 │   ├── app.js          views, transitions, sending and receiving
 │   ├── crypto.js       chunked AES-GCM seal / unseal
 │   ├── motion.js       tweens and speed-based motion blur
+│   ├── slider.js       press-and-drag liquid pill for the segmented controls
 │   ├── lens.js         edge refraction for Chromium
 │   ├── 404.html        page for unknown paths
 │   ├── robots.txt      crawler rules, sitemap.xml, and llms.txt for AI search

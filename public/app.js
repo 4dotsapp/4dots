@@ -1,6 +1,7 @@
 import { bundle, unbundle, seal, unseal } from './crypto.js';
 import { ease, motionBlur, prefersReducedMotion, rollDigits, tween } from './motion.js';
 import { lens } from './lens.js';
+import { liquidSlider } from './slider.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const TABS = ['send', 'receive'];
@@ -180,29 +181,7 @@ function go(tab, name, { axis = 'y', dir = 1 } = {}) {
 
 /* ───────────── tabs ───────────── */
 
-let thumbX = 0;
-let thumbRun = 0;
-
-function placeThumb() {
-  thumbX = TABS.indexOf(state.tab) * thumb.offsetWidth;
-  thumb.style.transform = `translate3d(${thumbX}px, 0, 0)`;
-}
-
-/** The selection pill slides like a drop of liquid: stretching mid-flight, blurred by its speed. */
-function slideThumb() {
-  const from = thumbX;
-  const to = TABS.indexOf(state.tab) * thumb.offsetWidth;
-  thumbX = to;
-  const run = ++thumbRun;
-  const blur = motionBlur(thumb, 'x', { strength: 0.4, max: 8 });
-  tween(300, (v, p) => {
-    if (run !== thumbRun) return;
-    const x = from + (to - from) * v;
-    const stretch = Math.sin(Math.PI * p);
-    thumb.style.transform = `translate3d(${x}px, 0, 0) scale(${1 + 0.14 * stretch}, ${1 - 0.08 * stretch})`;
-    blur.track(x);
-  }, ease.outCubic).then(() => blur.release());
-}
+const tabSlider = liquidSlider(seg, thumb, tabs, (i) => setTab(TABS[i]));
 
 function setTab(tab, { instant = false } = {}) {
   if (tab === state.tab) return;
@@ -216,12 +195,12 @@ function setTab(tab, { instant = false } = {}) {
   card.setAttribute('aria-labelledby', `tab-${tab}`);
   const target = views[`${tab}-${state.view[tab]}`];
   if (instant) {
-    placeThumb();
+    tabSlider.select(TABS.indexOf(tab), { instant: true });
     $('.view.active', viewport)?.classList.remove('active');
     target.classList.add('active');
     return;
   }
-  slideThumb();
+  tabSlider.select(TABS.indexOf(tab));
   transition(target, 'x', dir).then(() => {
     if (tab === 'receive' && state.view.receive === 'enter' && matchMedia('(pointer: fine)').matches) focusPin();
   });
@@ -330,8 +309,12 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
+const ttlSlider = liquidSlider($('.chips'), $('.chips-thumb'), ttlChips, (i) => selectTtl(ttlChips[i]),
+  ttlChips.findIndex((chip) => chip.getAttribute('aria-checked') === 'true'));
+
 function selectTtl(chip) {
   state.ttl = Number(chip.dataset.ttl);
+  ttlSlider.select(ttlChips.indexOf(chip));
   for (const other of ttlChips) {
     const checked = other === chip;
     other.setAttribute('aria-checked', String(checked));
@@ -896,8 +879,6 @@ window.addEventListener('pointermove', (event) => {
 
 buildReels();
 buildTicker();
-placeThumb();
-new ResizeObserver(placeThumb).observe(seg);
 lens(seg);
 lens($('.badge'), { bezel: 10, scale: 20 });
 if (navigator.share) $('[data-action="share"]').hidden = false;

@@ -369,6 +369,7 @@ a.badge:hover .i {
 /* ───────────── segmented control ───────────── */
 .seg {
   align-self: center;
+  touch-action: pan-y;
   display: grid;
   grid-template-columns: 1fr 1fr;
   width: min(100%, 280px);
@@ -395,17 +396,48 @@ a.badge:hover .i {
   color: var(--text);
 }
 
-.seg-thumb {
+.seg-thumb,
+.chips-thumb {
   position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
-  width: calc(50% - 4px);
+  left: 0;
   border-radius: 999px;
   background: var(--fill-3);
+  will-change: transform;
+  transition: box-shadow 0.25s var(--out);
+}
+
+.seg-thumb {
+  top: 4px;
+  bottom: 4px;
+  width: calc(50% - 4px);
+  transform: translateX(4px);
   box-shadow:
     inset 0 1px 0.5px var(--spec),
     0 6px 16px -8px rgb(0 0 0 / 0.55);
+}
+
+/* Held: the pill lifts off the track. */
+.seg-thumb.pressed,
+.chips-thumb.pressed {
+  box-shadow:
+    inset 0 1px 0.5px var(--spec),
+    inset 0 0 0 1px var(--hairline),
+    0 12px 26px -10px rgb(0 0 0 / 0.6);
+}
+
+/* While dragging, the label under the pill lights up instead of the current choice. */
+.dragging {
+  cursor: grabbing;
+}
+
+.dragging [aria-selected="true"]:not(.lit),
+.dragging [aria-checked="true"]:not(.lit) {
+  color: var(--text-2);
+}
+
+.seg button.lit,
+.chips button.lit {
+  color: var(--text);
 }
 
 /* ───────────── card + views ───────────── */
@@ -682,6 +714,8 @@ label.option {
 }
 
 .chips {
+  position: relative;
+  touch-action: pan-y;
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -701,16 +735,18 @@ label.option {
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.3s var(--spring);
-}
-
-.chips button:active {
-  transform: scale(0.94);
+  position: relative;
+  z-index: 1;
+  transition: color 0.2s;
 }
 
 .chips button[aria-checked="true"] {
-  background: var(--fill-3);
   color: var(--text);
+}
+
+.chips-thumb {
+  top: 3px;
+  bottom: 3px;
   box-shadow: inset 0 1px 0.5px var(--spec), 0 4px 12px -4px rgb(0 0 0 / 0.45);
 }
 
