@@ -1060,9 +1060,9 @@ label.option {
   width: 100%;
 }
 
-/* The QR code is for showing a phone to someone else, so it only appears on small screens. */
-.actions [data-action="qr"] {
-  display: none;
+/* With all four actions shown, two rows of two rather than three and a straggler. */
+.actions:not(:has(> [hidden])) {
+  grid-template-columns: repeat(auto-fit, minmax(max(140px, calc(50% - 5px)), 1fr));
 }
 
 .subactions {
@@ -1595,10 +1595,6 @@ label.option {
 
   .chips button {
     padding: 0 10px;
-  }
-
-  .actions [data-action="qr"] {
-    display: inline-flex;
   }
 
   .actions:has(> [data-action="share"][hidden]) > [data-action="qr"] {
