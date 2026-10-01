@@ -1,0 +1,13 @@
+# 4dots
+
+> 4dots shares notes, photos and files up to 1 GB with a four-digit code. Everything is encrypted in the sender's browser with AES-256-GCM before upload, so the server and storage only ever see ciphertext. There are no accounts. Drops expire after 10 minutes, an hour or a day, can burn after the first open, and can be deleted early.
+
+How to use it: open https://4dots.app, write a note or add files, and press "Encrypt & get code". Share the four digits or the link. The recipient opens https://4dots.app, switches to Receive and types the code, or opens the link.
+
+Four digits are quick to share and also quick to guess, so 4dots suits things that matter for minutes, not long-term secrets. Wrong codes are rate-limited per IP.
+
+## Links
+
+- [4dots](https://4dots.app/): the app
+- [Source code](https://github.com/4dotsapp/4dots): MIT licensed, runs on Cloudflare Workers with nimbo.fun storage
+- [Docs](https://github.com/4dotsapp/4dots/blob/main/docs/README.md): running, deploying, API and security model

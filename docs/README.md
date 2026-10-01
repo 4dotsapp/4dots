@@ -105,7 +105,7 @@ The Durable Object's alarm expires drops and abandoned uploads on time and delet
 
 ## Brand
 
-Icons live in [`docs/brand`](brand): the app icon with and without rounded corners, the four-dot mark for dark and light backgrounds (transparent), and a `favicon.ico`. The site's own favicons and link preview are in `public/`.
+Icons live in [`docs/brand`](brand): the app icon with and without rounded corners, the four-dot mark for dark and light backgrounds (transparent), and a `favicon.ico`. The site's own favicons, link preview image (`og.png`, 1200×630) and web app manifest are in `public/`.
 
 <br>
 
@@ -126,6 +126,8 @@ Icons live in [`docs/brand`](brand): the app icon with and without rounded corne
 │   ├── crypto.js       chunked AES-GCM seal / unseal
 │   ├── motion.js       tweens and speed-based motion blur
 │   ├── lens.js         edge refraction for Chromium
+│   ├── 404.html        page for unknown paths
+│   ├── robots.txt      crawler rules, sitemap.xml, and llms.txt for AI search
 │   └── _headers        security headers for the static files
 ├── dev/                mock nimbo API and `npm run dev`
 └── docs/               README images and brand icons

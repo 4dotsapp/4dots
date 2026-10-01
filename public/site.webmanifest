@@ -1,11 +1,15 @@
 {
+  "id": "/",
   "name": "4dots",
   "short_name": "4dots",
-  "description": "Send a note or a file. Open it with four digits.",
+  "description": "Share notes, photos and files with a 4-digit code. End-to-end encrypted, no sign-up.",
+  "lang": "en",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0c0c0b",
   "theme_color": "#0c0c0b",
+  "categories": ["productivity", "utilities"],
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }

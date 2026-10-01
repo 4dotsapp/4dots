@@ -3,21 +3,95 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>4dots — share anything with four digits</title>
-  <meta name="description" content="End-to-end encrypted sharing for text, images and files. No accounts, just a four-digit code.">
-  <meta property="og:title" content="4dots">
-  <meta property="og:description" content="Send a note or a file. Open it with four digits.">
-  <meta property="og:image" content="https://4dots.app/og.png">
-  <meta property="og:url" content="https://4dots.app/">
-  <meta name="twitter:card" content="summary_large_image">
+  <title>4dots — Share files, photos and notes with a 4-digit code</title>
+  <meta name="description" content="Send notes, photos and files up to 1 GB with a 4-digit code. End-to-end encrypted in your browser, no sign-up, and gone when it’s done.">
+  <link rel="canonical" href="https://4dots.app/">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+  <meta name="application-name" content="4dots">
+  <meta name="apple-mobile-web-app-title" content="4dots">
   <meta name="color-scheme" content="dark light">
+  <!-- Link previews such as Discord take the first theme-color as their accent; browsers skip it. -->
+  <meta name="theme-color" content="#ff6a2b" media="not all">
   <meta name="theme-color" content="#0c0c0b" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#ebe9e4" media="(prefers-color-scheme: light)">
   <meta name="referrer" content="no-referrer">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="4dots">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:url" content="https://4dots.app/">
+  <meta property="og:title" content="Share anything with four digits">
+  <meta property="og:description" content="Notes, photos and files up to 1 GB, encrypted in your browser and opened with a 4-digit code. No sign-up. Gone when it’s done.">
+  <meta property="og:image" content="https://4dots.app/og.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="4dots: share anything with four digits. End-to-end encrypted, up to 1 GB, no sign-up.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="4dots — share anything with four digits">
+  <meta name="twitter:description" content="Notes, photos and files up to 1 GB, encrypted in your browser and opened with a 4-digit code. No sign-up. Gone when it’s done.">
+  <meta name="twitter:image" content="https://4dots.app/og.png">
+  <meta name="twitter:image:alt" content="4dots: share anything with four digits. End-to-end encrypted, up to 1 GB, no sign-up.">
+
   <link rel="icon" href="/favicon.ico" sizes="48x48">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://4dots.app/#website",
+        "url": "https://4dots.app/",
+        "name": "4dots",
+        "description": "Share notes, photos and files with a 4-digit code. End-to-end encrypted, no sign-up.",
+        "inLanguage": "en",
+        "publisher": { "@id": "https://4dots.app/#organization" }
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://4dots.app/#organization",
+        "name": "4dots",
+        "url": "https://4dots.app/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://4dots.app/icon-512.png",
+          "width": 512,
+          "height": 512
+        },
+        "sameAs": ["https://github.com/4dotsapp/4dots"]
+      },
+      {
+        "@type": "WebApplication",
+        "@id": "https://4dots.app/#app",
+        "name": "4dots",
+        "url": "https://4dots.app/",
+        "description": "Send notes, photos and files up to 1 GB with a 4-digit code. Everything is encrypted in the browser with AES-256-GCM before upload, expires on its own and can burn after the first open.",
+        "applicationCategory": "UtilitiesApplication",
+        "applicationSubCategory": "File sharing",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires a modern browser with JavaScript and Web Crypto.",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "End-to-end encryption with AES-256-GCM",
+          "Text, images and files up to 1 GB",
+          "Four-digit codes, no account needed",
+          "Expires after 10 minutes, an hour or a day",
+          "Optional burn after the first open",
+          "Open source under the MIT license"
+        ],
+        "image": "https://4dots.app/og.png",
+        "screenshot": "https://4dots.app/og.png",
+        "license": "https://opensource.org/licenses/MIT",
+        "publisher": { "@id": "https://4dots.app/#organization" }
+      }
+    ]
+  }
+  </script>
   <link rel="stylesheet" href="/styles.css">
   <script type="module" src="/app.js"></script>
 </head>
