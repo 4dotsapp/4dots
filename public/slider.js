@@ -36,7 +36,7 @@ class Spring {
 }
 
 /** Soft limit: the further past the end, the harder it pulls back. */
-const rubber = (distance) => 14 * (1 - Math.exp(-distance / 40));
+const rubber = (distance, size) => Math.min(14, size * 0.2) * (1 - Math.exp(-distance / 40));
 
 export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
   const x = new Spring(0, 520, 28, 0.2);
@@ -49,6 +49,7 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
   let blur = null;
   let press = null;
   let swallowClicksUntil = 0;
+  let box = { width: 0, height: 0, pill: 0 };
 
   const slot = (i) => ({ left: items[i].offsetLeft, width: items[i].offsetWidth });
   const centers = () => items.map((_, i) => slot(i).left + slot(i).width / 2);
@@ -74,10 +75,24 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
     return slot(items.length - 1).width;
   }
 
+  function measure() {
+    box = { width: track.clientWidth, height: track.clientHeight, pill: items[0].offsetHeight };
+  }
+
+  // The pill always stays inside the track, keeping an even gap to its rim. Swollen
+  // beside an end it grows inward, and pushed into an end it squashes against it.
   function render() {
     const stretch = Math.min(0.16, Math.abs(x.velocity) / 6000);
-    thumb.style.width = `${width.value}px`;
-    thumb.style.transform = `translate3d(${x.value}px, 0, 0) scale(${swell.value * (1 + stretch)}, ${swell.value * (1 - stretch / 2)})`;
+    const height = Math.min(box.height - 2, box.pill * swell.value * (1 - stretch / 2));
+    const inset = (box.height - height) / 2;
+    const center = x.value + width.value / 2;
+    const half = (width.value * swell.value * (1 + stretch)) / 2;
+    const left = Math.max(inset, center - half);
+    const right = Math.min(box.width - inset, center + half);
+    thumb.style.top = `${inset}px`;
+    thumb.style.height = `${height}px`;
+    thumb.style.width = `${Math.max(right - left, height)}px`;
+    thumb.style.transform = `translate3d(${left}px, 0, 0)`;
   }
 
   function tick(now) {
@@ -113,6 +128,7 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
   function select(i, { instant = false } = {}) {
     index = i;
     if (!track.offsetWidth) return;
+    measure();
     x.target = slot(i).left;
     width.target = slot(i).width;
     if (instant) {
@@ -140,8 +156,8 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
     const min = slot(0).left;
     const max = slot(items.length - 1).left + slot(items.length - 1).width;
     let left = center - w / 2;
-    if (left < min) left = min - rubber(min - left);
-    if (left + w > max) left = max - w + rubber(left + w - max);
+    if (left < min) left = min - rubber(min - left, w);
+    if (left + w > max) left = max - w + rubber(left + w - max, w);
     x.target = left;
     width.target = w;
     light(nearest(left + w / 2));
@@ -174,6 +190,7 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
   track.addEventListener('pointerdown', (event) => {
     if (press || event.button !== 0) return;
     if (event.pointerType === 'mouse') event.preventDefault();
+    measure();
     const origin = track.getBoundingClientRect().left + track.clientLeft;
     const at = event.clientX - origin;
     const onThumb = at >= x.value && at <= x.value + width.value;
@@ -205,6 +222,7 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
     if (!press) select(index, { instant: true });
   }).observe(track);
 
+  thumb.style.bottom = 'auto';
   select(index, { instant: true });
   return { select };
 }
