@@ -919,6 +919,34 @@ window.addEventListener('pointermove', (event) => {
   });
 }, { passive: true });
 
+/* ───────────── shared to the app ───────────── */
+
+// Installed as an app, 4dots is a share target. The service worker (sw.js) parks
+// what was shared on this device; it lands here as a new drop, ready to encrypt.
+const SHARE_CACHE = '4dots-share';
+
+async function takeShared() {
+  const cache = await caches.open(SHARE_CACHE);
+  const meta = await cache.match('/share/meta').then((res) => res?.json());
+  if (!meta) {
+    toast('Sharing to 4dots is ready now. Please share that again.');
+    return;
+  }
+  const files = await Promise.all(meta.files.map(async ({ key, name, type, lastModified }) => {
+    const blob = await (await cache.match(key)).blob();
+    return new File([blob], name, { type, lastModified });
+  }));
+  await caches.delete(SHARE_CACHE);
+  if (meta.text) {
+    note.value = note.value ? `${note.value}\n${meta.text}` : meta.text;
+    note.dispatchEvent(new Event('input'));
+  }
+  if (files.length) {
+    addFiles(files);
+    toast(`${plural(files.length, 'file')} added`);
+  }
+}
+
 /* ───────────── start ───────────── */
 
 buildReels();
@@ -927,6 +955,12 @@ lens(seg);
 lens($('.badge'), { bezel: 10, scale: 20 });
 if (navigator.share) $('[data-action="share"]').hidden = false;
 refreshCompose();
+navigator.serviceWorker?.register('/sw.js').catch(() => {});
+
+if (new URLSearchParams(location.search).has('share')) {
+  history.replaceState(null, '', '/');
+  takeShared().catch(() => toast('Couldn’t pick up what was shared.', 'error'));
+}
 
 api('/api/config')
   .then((config) => {

@@ -24,6 +24,9 @@ function settings(env) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // Shares to the installed app are caught by the service worker. If one arrives
+    // here instead, its contents must not reach the server unencrypted: just open the app.
+    if (url.pathname === '/share' && request.method === 'POST') return Response.redirect(new URL('/?share', url), 303);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     try {
       if (!env.NIMBO_TOKEN) throw new HttpError(500, 'The server is missing its NIMBO_TOKEN secret.');
