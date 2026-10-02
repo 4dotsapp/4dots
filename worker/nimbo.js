@@ -72,7 +72,7 @@ export function nimbo(env) {
       const problem = findFailure(await res.json().catch(() => null));
       if (problem) {
         console.warn(`nimbo upload: ${problem}`);
-        throw new HttpError(502, 'Storage refused the upload.');
+        throw /quota/i.test(problem) ? outOfStorage() : new HttpError(502, 'Storage refused the upload.');
       }
     },
 
@@ -89,17 +89,27 @@ export function nimbo(env) {
   };
 }
 
+// Storage won't take more data: the nimbo account's quota or the server's disk is
+// full. It isn't the sender's fault and a retry won't clear it, so the message says
+// so and the browser is told (by the 507) not to re-send the part.
+export function outOfStorage() {
+  return new HttpError(507, '4dots is out of storage right now. It’s not your file — please try again later.');
+}
+
 export async function failure(res, what) {
   const detail = await res.text().catch(() => '');
   console.warn(`nimbo ${what}: HTTP ${res.status} ${detail.slice(0, 200)}`);
+  let code = '';
+  try { code = String(JSON.parse(detail)?.code ?? ''); } catch {}
+  // 403 (plan quota), 507 (server disk), and 413 all mean storage is full: parts are
+  // capped well under nimbo's hard limit and the drop size is checked before upload,
+  // so a 413 here is a quota refusal, not an oversized file.
+  if (code === 'quota_exceeded' || res.status === 403 || res.status === 413 || res.status === 507) {
+    return outOfStorage();
+  }
   switch (res.status) {
     case 401:
       return new HttpError(502, 'Storage rejected the server’s API key.');
-    case 403:
-    case 507:
-      return new HttpError(507, 'Storage is full right now.');
-    case 413:
-      return new HttpError(413, 'That drop is too large for storage.');
     case 429:
       return new HttpError(503, 'Storage is busy. Try again in a minute.', { 'retry-after': '60' });
     default:
@@ -111,7 +121,7 @@ export async function failure(res, what) {
 // envelope, so look for any failed entry rather than depending on one shape.
 function findFailure(data, depth = 0) {
   if (!data || typeof data !== 'object' || depth > 5) return null;
-  if (data.ok === false) return String(data.error ?? data.message ?? 'upload failed');
+  if (data.ok === false) return String(data.code ?? data.error ?? data.message ?? 'upload failed');
   for (const value of Object.values(data)) {
     const problem = findFailure(value, depth + 1);
     if (problem) return problem;

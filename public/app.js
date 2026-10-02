@@ -391,7 +391,8 @@ function upload(url, blob, reservation, onProgress) {
       }
       if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
       const err = new Error(data.error || `Upload failed (${xhr.status}).`);
-      err.retryable = xhr.status >= 500;
+      // A full store (507) won't clear by re-sending the part, so don't retry it.
+      err.retryable = xhr.status >= 500 && xhr.status !== 507;
       reject(err);
     });
     xhr.addEventListener('error', () => reject(Object.assign(new Error('Network error. Check your connection.'), { retryable: true })));
