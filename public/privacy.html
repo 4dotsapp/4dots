@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Privacy Policy · 4dots</title>
+  <meta name="description" content="What 4dots can and can't see. Drops are encrypted on your device, and the service keeps only what it needs to work.">
+  <link rel="canonical" href="https://4dots.app/privacy">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0c0c0b" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ebe9e4" media="(prefers-color-scheme: light)">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true">
+    <div class="ticker">
+      <div class="track"><span>2741 0937 8853 1206 5512 4821</span><span>2741 0937 8853 1206 5512 4821</span></div>
+      <div class="track"><span>3804 1297 6650 9152 4471 0386</span><span>3804 1297 6650 9152 4471 0386</span></div>
+    </div>
+    <div class="grain"></div>
+  </div>
+
+  <div class="shell">
+    <header class="top">
+      <a class="brand reveal" href="/" aria-label="4dots, home">
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="6.5" cy="6.5" r="4.5"/><circle cx="17.5" cy="6.5" r="4.5"/>
+          <circle cx="6.5" cy="17.5" r="4.5"/><circle class="hot" cx="17.5" cy="17.5" r="4.5"/>
+        </svg>
+        <span>4dots</span>
+      </a>
+    </header>
+
+    <section class="hero">
+      <h1 class="reveal d1">Privacy Policy.<br><span>What 4dots sees, and what it can’t.</span></h1>
+    </section>
+
+    <main class="doc glass reveal d2">
+      <h2>The short version</h2>
+      <ul>
+        <li>Your notes and files are encrypted on your device before they’re uploaded. We only ever store that encrypted data.</li>
+        <li>No accounts, no cookies, no ads, no analytics and no tracking. We don’t sell or share your data.</li>
+        <li>Every drop deletes itself after 10 minutes, an hour or a day, or right after it’s opened if you choose burn after reading.</li>
+      </ul>
+
+      <h2>Who runs 4dots</h2>
+      <p>4dots (“we”) runs the service at 4dots.app. You can reach us at <a href="mailto:support@4dots.app">support@4dots.app</a>. 4dots is open source, so you can check everything on this page in the <a href="https://github.com/4dotsapp/4dots">code on GitHub</a>.</p>
+
+      <h2>What we can’t see</h2>
+      <p>Your browser encrypts your note, your files and their names with AES-256-GCM before anything leaves your device, and the recipient’s browser decrypts them. Our storage provider never receives readable content or your code. Our server sees which code is being opened, but only ever handles encrypted data.</p>
+      <p>The key comes from your four-digit code plus a per-code secret held by our server. Because a code has only 10,000 possibilities, whoever runs the server could in principle work out keys. We never try to, and it’s why 4dots is meant for things that matter for minutes, not secrets that must stay secret for years.</p>
+
+      <h2>What we handle, and why</h2>
+      <ul>
+        <li><strong>Encrypted drops</strong>, so the recipient can download them.</li>
+        <li><strong>Drop details</strong>: each drop’s size, when it was created and expires, whether it burns after reading, and a fingerprint of the token that lets the sender delete it early. We need these to deliver and delete drops.</li>
+        <li><strong>IP addresses</strong>, counted briefly to limit how many drops one address can create and how many wrong codes it can try. This is what stops codes from being guessed.</li>
+        <li><strong>Technical logs</strong>: our hosting provider keeps short-lived records of requests and errors, which can include IP addresses and browser details, so we can run and fix the service.</li>
+        <li><strong>Emails you send us</strong>: your address and message, used only to reply.</li>
+      </ul>
+      <p>Under the EU’s GDPR, we rely on our legitimate interest in running a working, secure service (Art. 6(1)(f)) and on providing the service you ask for (Art. 6(1)(b)).</p>
+
+      <h2>How long we keep it</h2>
+      <ul>
+        <li><strong>Drops:</strong> until they expire, are opened with burn after reading, or are deleted by the sender. The stored data is deleted straight after. There are no backups.</li>
+        <li><strong>Unfinished uploads:</strong> deleted 15 minutes after the last activity.</li>
+        <li><strong>Rate-limit counters:</strong> they reset after 10 minutes and are deleted within an hour.</li>
+        <li><strong>Technical logs:</strong> a few days.</li>
+        <li><strong>Emails:</strong> as long as it takes to deal with your message.</li>
+      </ul>
+
+      <h2>Who processes data for us</h2>
+      <ul>
+        <li><strong>Cloudflare</strong> hosts the site and the server, protects them from attacks, and forwards emails sent to 4dots.app addresses. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare’s privacy policy</a>.</li>
+        <li><strong><a href="https://nimbo.fun">nimbo.fun</a></strong> stores encrypted drops until they’re deleted. It receives only encrypted data under random names.</li>
+      </ul>
+      <p>Their servers may be outside your country, including outside the EU.</p>
+
+      <h2>On your device</h2>
+      <p>4dots sets no cookies and loads nothing from other websites. It may save one setting in your browser: whether to use lighter animations on a slow device. When you share files to the installed app, they stay on your device only until 4dots opens them.</p>
+
+      <h2>Your rights</h2>
+      <p>Depending on where you live, for example under the GDPR, you can ask to access, correct or delete personal data we hold about you, object to how we use it, and complain to your data protection authority. With no accounts and almost nothing kept, there’s usually little or nothing we can link to you, but write to <a href="mailto:support@4dots.app">support@4dots.app</a> and we’ll help.</p>
+
+      <h2>Children</h2>
+      <p>4dots isn’t meant for children under 13, or under the age of digital consent in your country if that’s higher (16 in many EU countries).</p>
+
+      <h2>Changes</h2>
+      <p>If this policy changes, we’ll update this page and the date below.</p>
+
+      <p class="updated">Last updated 2 October 2026</p>
+    </main>
+
+    <footer class="foot">
+      <p class="fine legal reveal d3"><a href="/">4dots</a><a href="/terms">Terms of Use</a><a href="mailto:support@4dots.app">Contact</a></p>
+    </footer>
+  </div>
+</body>
+</html>

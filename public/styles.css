@@ -1414,6 +1414,65 @@ label.option {
   text-underline-offset: 2px;
 }
 
+/* ───────────── privacy and terms ───────────── */
+.doc {
+  padding: 26px 24px 24px;
+  border-radius: 28px;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.doc h2 {
+  margin: 28px 0 8px;
+  color: var(--text);
+  font: 650 17px/1.3 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.doc h2:first-child {
+  margin-top: 0;
+}
+
+.doc p,
+.doc ul {
+  margin: 0 0 12px;
+}
+
+.doc ul {
+  padding-left: 20px;
+}
+
+.doc li {
+  margin: 6px 0;
+}
+
+.doc li::marker {
+  color: var(--text-3);
+}
+
+.doc strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.doc a {
+  color: var(--text);
+  text-underline-offset: 2px;
+}
+
+.doc .updated {
+  margin: 22px 0 0;
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.legal {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
 /* ───────────── overlays ───────────── */
 .drag-overlay {
   position: fixed;

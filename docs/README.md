@@ -130,6 +130,8 @@ Icons live in [`docs/brand`](brand): the app icon with and without rounded corne
 │   ├── sw.js           service worker that receives what's shared to the installed app
 │   ├── lens.js         edge refraction for Chromium
 │   ├── 404.html        page for unknown paths
+│   ├── privacy.html    privacy policy, served at /privacy
+│   ├── terms.html      terms of use, served at /terms
 │   ├── robots.txt      crawler rules, sitemap.xml, and llms.txt for AI search
 │   └── _headers        security headers for the static files
 ├── dev/                mock nimbo API and `npm run dev`

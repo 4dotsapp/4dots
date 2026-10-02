@@ -7,4 +7,12 @@
       <image:loc>https://4dots.app/og.png</image:loc>
     </image:image>
   </url>
+  <url>
+    <loc>https://4dots.app/privacy</loc>
+    <lastmod>2026-10-02</lastmod>
+  </url>
+  <url>
+    <loc>https://4dots.app/terms</loc>
+    <lastmod>2026-10-02</lastmod>
+  </url>
 </urlset>
