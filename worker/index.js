@@ -15,6 +15,8 @@ const MAGIC = [0x4e, 0x4d, 0x42, 0x32]; // "NMB2": the browser's chunked encrypt
 const MAX_PARTS = 64;
 const SLACK = 1024 * 1024; // encryption overhead on top of the plaintext limit
 const encoder = new TextEncoder();
+const STATUS_TTL = 15_000; // a short cache so the status page can't hammer storage
+let statusCache = null;
 
 function settings(env) {
   const mib = (value, fallback) => Math.round((Number(value) || fallback) * 1024 * 1024);
@@ -47,6 +49,9 @@ async function route(request, env, ctx, url) {
 
   if (path === '/api/config' && method === 'GET') {
     return json(200, { maxBytes, partBytes, ttls: TTLS });
+  }
+  if (path === '/api/status' && method === 'GET') {
+    return status(env);
   }
   if (path === '/api/drops' && method === 'POST') {
     const { code, reservation } = unwrap(await registry.reserve(ip));
@@ -185,6 +190,34 @@ async function openDrop(env, ctx, registry, code, ip) {
       'x-drop-expires-at': String(drop.expiresAt),
     },
   });
+}
+
+/* ───────────── status ───────────── */
+
+// A tiny public health check for /status: the Worker is answering, and storage is
+// reachable. Only up/down and latency are exposed — never the account details nimbo
+// returns. Cached briefly so the page can poll without loading storage.
+async function status(env) {
+  const now = Date.now();
+  if (!statusCache || now - statusCache.at >= STATUS_TTL) {
+    const probe = await nimbo(env).health();
+    const storage = probe.ok
+      ? 'operational'
+      : probe.status === 401 || probe.status === 403
+        ? 'degraded'
+        : 'down';
+    statusCache = {
+      at: now,
+      body: {
+        updated: new Date(now).toISOString(),
+        services: [
+          { id: 'app', name: '4dots', status: 'operational' },
+          { id: 'storage', name: 'Encrypted storage', status: storage, ms: probe.ms },
+        ],
+      },
+    };
+  }
+  return json(200, statusCache.body, { 'cache-control': 'public, max-age=15' });
 }
 
 /* ───────────── takedowns ───────────── */

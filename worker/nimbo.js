@@ -10,10 +10,10 @@ export function nimbo(env) {
   const auth = { authorization: `Bearer ${env.NIMBO_TOKEN}` };
   const fullPath = (name) => (folder ? `${folder}/${name}` : name);
 
-  async function call(method, path, { query, json, body, headers } = {}) {
+  async function call(method, path, { query, json, body, headers, signal } = {}) {
     const url = new URL(path, baseUrl);
     for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value);
-    const init = { method, headers: { ...auth, ...headers }, body };
+    const init = { method, headers: { ...auth, ...headers }, body, signal };
     if (json !== undefined) {
       init.headers['content-type'] = 'application/json';
       init.body = JSON.stringify(json);
@@ -85,6 +85,19 @@ export function nimbo(env) {
       const res = await call('DELETE', '/api/v1/files', { query: { path: fullPath(name) } });
       await res.body?.cancel();
       if (!res.ok && res.status !== 404) throw await failure(res, 'delete');
+    },
+
+    // A quick, non-throwing reachability check for the status page. It reads only the
+    // HTTP result and the round-trip time, never the account details in the response body.
+    async health() {
+      const started = Date.now();
+      try {
+        const res = await call('GET', '/api/v1/me', { signal: AbortSignal.timeout(5000) });
+        await res.body?.cancel();
+        return { ok: res.ok, status: res.status, ms: Date.now() - started };
+      } catch {
+        return { ok: false, status: 0, ms: Date.now() - started };
+      }
     },
   };
 }

@@ -27,6 +27,8 @@
   --focus-glow: rgb(242 241 237 / 0.09);
   --danger: #ff5f57;
   --danger-glow: rgb(255 95 87 / 0.14);
+  --ok: #35c66b;
+  --warn: #ffb020;
   --ticker: rgb(255 255 255 / 0.035);
 
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -63,6 +65,8 @@
     --focus-glow: rgb(20 20 18 / 0.07);
     --danger: #d63a32;
     --danger-glow: rgb(214 58 50 / 0.12);
+    --ok: #1f9d57;
+    --warn: #b7791f;
     --ticker: rgb(20 20 18 / 0.045);
   }
 }
@@ -1523,6 +1527,85 @@ label.option {
 
 .admin-result:empty {
   display: none;
+}
+
+/* ───────────── status ───────────── */
+.status-overall {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  margin-bottom: 18px;
+}
+
+.status-overall .label {
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.services {
+  display: grid;
+}
+
+.svc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 2px;
+  border-top: 1px solid var(--hairline);
+}
+
+.svc:first-child {
+  border-top: 0;
+}
+
+.svc-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.svc-state {
+  color: var(--text-2);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.svc-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+[data-status="operational"] > .svc-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+[data-status="degraded"] > .svc-dot {
+  background: var(--warn);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 22%, transparent);
+}
+
+[data-status="down"] > .svc-dot {
+  background: var(--danger);
+  box-shadow: 0 0 0 4px var(--danger-glow);
+}
+
+.status-note {
+  margin: 14px 0 0;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.status-note a {
+  color: inherit;
 }
 
 /* ───────────── overlays ───────────── */
