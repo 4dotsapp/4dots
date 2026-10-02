@@ -35,14 +35,14 @@
     </section>
 
     <main class="doc glass">
-      <form class="admin" id="takedown" autocomplete="on">
+      <form class="admin" id="takedown" autocomplete="off">
         <label>
           <span>Drop code</span>
           <input class="field" name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off" placeholder="1234" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
         </label>
         <label>
           <span>Admin key</span>
-          <input class="field" name="key" type="password" required autocomplete="current-password" placeholder="The ADMIN_TOKEN secret">
+          <input class="field masked" name="key" type="text" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="The ADMIN_TOKEN secret" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
         </label>
         <button class="btn btn-primary" type="submit">Delete drop</button>
         <p class="admin-result" id="result" role="status" aria-live="polite"></p>
