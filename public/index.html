@@ -154,7 +154,8 @@
         <!-- Send: compose -->
         <section class="view active" data-view="send-compose">
           <label class="sr-only" for="note">Message</label>
-          <textarea id="note" class="note" rows="4" placeholder="Write a message, paste a link, a password…" spellcheck="false"></textarea>
+          <!-- Not a login form: the ignore markers keep password managers from offering to save or fill it. -->
+          <textarea id="note" class="note" rows="4" placeholder="Write a message, paste a link or a secret…" spellcheck="false" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other"></textarea>
 
           <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-describedby="limit-text">
             <span class="dz-icon"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg></span>
@@ -230,10 +231,10 @@
           <div class="enter">
             <p class="eyebrow" id="pin-label">Enter the code</p>
             <div class="pin" id="pin" role="group" aria-labelledby="pin-label">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" placeholder="•" aria-label="Digit 1">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 2">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 3">
-              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 4">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="4" placeholder="•" aria-label="Digit 1" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 2" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 3" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
+              <input type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="•" aria-label="Digit 4" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other">
             </div>
             <p class="pin-msg" id="pin-msg" aria-live="assertive"></p>
             <button type="button" class="btn btn-primary" id="open-btn" disabled>
