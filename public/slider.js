@@ -2,7 +2,7 @@
 // press makes it swell, a drag pulls it along under the finger (stretching with
 // speed and resisting past the ends), and a release lets it settle on the
 // nearest option with a little overshoot. Taps and keys keep working as before.
-import { motionBlur, prefersReducedMotion } from './motion.js';
+import { holdBackdrop, motionBlur, prefersReducedMotion } from './motion.js';
 
 const DRAG_THRESHOLD = 4;
 const SWELL = 1.1;
@@ -47,9 +47,11 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
   let frame = 0;
   let last = 0;
   let blur = null;
+  let releaseBackdrop = null;
   let press = null;
   let swallowClicksUntil = 0;
   let box = { width: 0, height: 0, pill: 0 };
+  let elementWidth = 0;
 
   const slot = (i) => ({ left: items[i].offsetLeft, width: items[i].offsetWidth });
   const centers = () => items.map((_, i) => slot(i).left + slot(i).width / 2);
@@ -81,18 +83,23 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
 
   // The pill always stays inside the track, keeping an even gap to its rim. Swollen
   // beside an end it grows inward, and pushed into an end it squashes against it.
+  // It moves by transform alone, so animating it costs no layout or repaint; its
+  // width only changes while it travels between options of different widths.
   function render() {
     const stretch = Math.min(0.16, Math.abs(x.velocity) / 6000);
+    const base = Math.round(width.value * 2) / 2;
+    if (base !== elementWidth) {
+      thumb.style.width = `${base}px`;
+      elementWidth = base;
+    }
     const height = Math.min(box.height - 2, box.pill * swell.value * (1 - stretch / 2));
     const inset = (box.height - height) / 2;
     const center = x.value + width.value / 2;
     const half = (width.value * swell.value * (1 + stretch)) / 2;
     const left = Math.max(inset, center - half);
     const right = Math.min(box.width - inset, center + half);
-    thumb.style.top = `${inset}px`;
-    thumb.style.height = `${height}px`;
-    thumb.style.width = `${Math.max(right - left, height)}px`;
-    thumb.style.transform = `translate3d(${left}px, 0, 0)`;
+    const shown = Math.max(right - left, height);
+    thumb.style.transform = `translate3d(${left + (shown - base) / 2}px, 0, 0) scale(${shown / base}, ${height / box.pill})`;
   }
 
   function tick(now) {
@@ -107,6 +114,7 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
       render();
       blur.release();
       blur = null;
+      releaseBackdrop();
       frame = 0;
       return;
     }
@@ -121,6 +129,7 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
     }
     if (frame) return;
     blur = motionBlur(thumb, 'x', { strength: 0.35, max: 6 });
+    releaseBackdrop = holdBackdrop();
     last = performance.now();
     frame = requestAnimationFrame(tick);
   }
@@ -222,7 +231,6 @@ export function liquidSlider(track, thumb, items, onSelect, initial = 0) {
     if (!press) select(index, { instant: true });
   }).observe(track);
 
-  thumb.style.bottom = 'auto';
   select(index, { instant: true });
   return { select };
 }

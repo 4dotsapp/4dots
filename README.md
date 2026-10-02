@@ -118,7 +118,7 @@ Then add your domain under the Worker's **Settings → Domains & Routes**, or se
 
 - **Frontend:** plain HTML, CSS and JavaScript modules. No framework, no build step.
 - **Glass:** `backdrop-filter` with rim lighting and a pointer-following sheen. In Chromium, an SVG displacement map bends the backdrop at the edges like a glass rod.
-- **Motion:** animation-frame tweens that blur each moving element along its direction of travel, in proportion to its speed.
+- **Motion:** animation-frame tweens that blur each moving element along its direction of travel, in proportion to its speed. Devices that can't hold about 40 fps get a lighter mode automatically.
 - **Crypto:** Web Crypto, with AES-256-GCM in 4&nbsp;MB chunks and PBKDF2-SHA256 keys.
 - **Server:** a Cloudflare Worker that streams every byte straight through, plus one Durable Object that remembers codes, expiry, burns and rate limits.
 - **Storage:** the [nimbo.fun](https://nimbo.fun/docs) REST API.

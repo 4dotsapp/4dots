@@ -1,5 +1,5 @@
 import { bundle, unbundle, seal, unseal } from './crypto.js';
-import { ease, motionBlur, prefersReducedMotion, rollDigits, tween } from './motion.js';
+import { ease, holdBackdrop, judgeFrames, motionBlur, prefersReducedMotion, rollDigits, tween } from './motion.js';
 import { lens } from './lens.js';
 import { liquidSlider } from './slider.js';
 import { qrSvg } from './qr.js';
@@ -135,6 +135,7 @@ function transition(next, axis = 'y', dir = 1) {
   prev.inert = true;
   card.classList.add('animating');
   const travel = axis === 'x' ? Math.min(viewport.clientWidth * 0.3, 140) : 22;
+  const releaseBackdrop = holdBackdrop();
   const outBlur = motionBlur(prev, axis, { strength: 0.35, max: 12 });
   const inBlur = motionBlur(next, axis, { strength: 0.35, max: 12 });
   const place = (el, offset) => {
@@ -142,12 +143,14 @@ function transition(next, axis = 'y', dir = 1) {
   };
 
   const control = { stopped: false };
+  const frames = [];
   const handle = {
     finish() {
       if (control.stopped) return;
       control.stopped = true;
       outBlur.release();
       inBlur.release();
+      releaseBackdrop();
       for (const el of [prev, next]) {
         el.style.removeProperty('transform');
         el.style.removeProperty('opacity');
@@ -162,6 +165,7 @@ function transition(next, axis = 'y', dir = 1) {
   running = handle;
 
   return tween(axis === 'x' ? 280 : 320, (v) => {
+    frames.push(performance.now());
     viewport.style.height = `${startHeight + (endHeight - startHeight) * v}px`;
     const out = -dir * travel * v;
     const into = dir * travel * (1 - v);
@@ -171,7 +175,11 @@ function transition(next, axis = 'y', dir = 1) {
     next.style.opacity = String(Math.min(1, v * 2));
     outBlur.track(out);
     inBlur.track(into);
-  }, ease.outQuart, control).then(() => handle.finish());
+  }, ease.outQuart, control).then(() => {
+    // Busy moments (encrypting, downloading) say nothing about the device itself.
+    if (!control.stopped && !state.sending && !state.receiving) judgeFrames(frames);
+    handle.finish();
+  });
 }
 
 function go(tab, name, { axis = 'y', dir = 1 } = {}) {
