@@ -71,6 +71,7 @@ The nimbo key can list, overwrite and delete everything in your storage, so it n
 | `POST /api/drops/:code/commit` | Finish the upload: `{ ttl, burn, parts }`. Returns the expiry and a revoke token |
 | `GET /api/drops/:code` | Stream the whole ciphertext back. Burn-after-reading drops are deleted after delivery |
 | `DELETE /api/drops/:code` | The sender deletes early with the revoke token (`x-revoke-token`) |
+| `POST /api/admin/takedown` | Deletes a reported drop: `{ code }` with `Authorization: Bearer <ADMIN_TOKEN>`. The private page at `/admin` does this for you |
 
 Workers accept at most 100&nbsp;MB per request, so the browser uploads in parts (90&nbsp;MiB by default). Each part becomes its own nimbo file, and downloads stream the parts back to back as a single response.
 
@@ -93,6 +94,7 @@ Set variables in `wrangler.jsonc` under `vars`, and secrets with `wrangler secre
 | Name | Default | |
 | --- | --- | --- |
 | `NIMBO_TOKEN` | required, **secret** | nimbo.fun API key |
+| `ADMIN_TOKEN` | off | Optional **secret**. Enables `/admin` for removing reported drops; use a long random value |
 | `DROP_SECRET` | derived from the key | Optional **secret**. Changing it (or the key) makes live drops undecryptable |
 | `MAX_UPLOAD_MB` | `1024` | Per-drop size limit (your nimbo plan's quota still applies) |
 | `PART_MB` | `90` | Upload part size. Keep it under the 100&nbsp;MB Workers request limit |
@@ -132,6 +134,8 @@ Icons live in [`docs/brand`](brand): the app icon with and without rounded corne
 │   ├── 404.html        page for unknown paths
 │   ├── privacy.html    privacy policy, served at /privacy
 │   ├── terms.html      terms of use, served at /terms
+│   ├── dmca.html       copyright and illegal-content reports, served at /dmca
+│   ├── admin.html      private page for removing reported drops (with admin.js)
 │   ├── robots.txt      crawler rules, sitemap.xml, and llms.txt for AI search
 │   └── _headers        security headers for the static files
 ├── dev/                mock nimbo API and `npm run dev`

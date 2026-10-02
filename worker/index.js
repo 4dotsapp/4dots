@@ -58,6 +58,9 @@ async function route(request, env, ctx, url) {
   if ((match = path.match(/^\/api\/drops\/(\d{4})\/commit$/)) && method === 'POST') {
     return commit(request, registry, match[1], maxBytes);
   }
+  if (path === '/api/admin/takedown' && method === 'POST') {
+    return takedown(request, env, registry, ip);
+  }
   if ((match = path.match(/^\/api\/drops\/(\d{4})$/))) {
     if (method === 'GET') return openDrop(env, ctx, registry, match[1], ip);
     if (method === 'DELETE') {
@@ -182,6 +185,24 @@ async function openDrop(env, ctx, registry, code, ip) {
       'x-drop-expires-at': String(drop.expiresAt),
     },
   });
+}
+
+/* ───────────── takedowns ───────────── */
+
+// Deletes a reported drop by its code. Only enabled when the ADMIN_TOKEN secret is set.
+async function takedown(request, env, registry, ip) {
+  if (!env.ADMIN_TOKEN) throw new HttpError(404, 'Not found.');
+  const given = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  if (!(await sameSecret(given, env.ADMIN_TOKEN))) unwrap(await registry.adminDenied(ip));
+  const body = await request.json().catch(() => ({}));
+  const code = String(body.code ?? '');
+  if (!/^\d{4}$/.test(code)) throw new HttpError(400, 'Enter a four-digit code.');
+  return json(200, unwrap(await registry.takedown(code)));
+}
+
+async function sameSecret(given, expected) {
+  const [a, b] = await Promise.all([given, expected].map((text) => crypto.subtle.digest('SHA-256', encoder.encode(text))));
+  return crypto.subtle.timingSafeEqual(a, b);
 }
 
 /* ───────────── per-code pepper ───────────── */

@@ -132,5 +132,5 @@ Issues and pull requests are welcome. Found a security problem? Please report it
 <br>
 
 <p align="center">
-  <sub><a href="https://4dots.app">4dots.app</a> · <a href="LICENSE">MIT licensed</a> · <a href="https://4dots.app/privacy">Privacy</a> · <a href="https://4dots.app/terms">Terms</a> · Storage by <a href="https://nimbo.fun">nimbo.fun</a></sub>
+  <sub><a href="https://4dots.app">4dots.app</a> · <a href="LICENSE">MIT licensed</a> · <a href="https://4dots.app/privacy">Privacy</a> · <a href="https://4dots.app/terms">Terms</a> · <a href="https://4dots.app/dmca">DMCA</a> · Storage by <a href="https://nimbo.fun">nimbo.fun</a></sub>
 </p>

@@ -244,6 +244,24 @@ export class Registry extends DurableObject {
     return { ok: true };
   }
 
+  /** Removes a drop for a takedown or abuse report, without the sender's revoke token. */
+  async takedown(code) {
+    const drop = this.kv.get(`d:${code}`);
+    const reservation = this.kv.get(`r:${code}`);
+    if (drop) this.#retire(code, drop);
+    if (reservation) this.#abandon(code, reservation);
+    if (drop || reservation) await this.#schedule();
+    return { removed: Boolean(drop && drop.expiresAt > Date.now()) };
+  }
+
+  /** A wrong admin key counts like a wrong code, so the key can't be guessed either. */
+  adminDenied(ip) {
+    const limited = this.#missLimit(ip);
+    if (limited) return limited;
+    this.#hit('miss', ip);
+    return fail(401, 'That admin key isn’t right.');
+  }
+
   async revoke(code, token, ip) {
     const limited = this.#missLimit(ip);
     if (limited) return limited;
