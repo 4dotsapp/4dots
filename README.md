@@ -122,6 +122,7 @@ Then add your domain under the Worker's **Settings → Domains & Routes**, or se
 - **Crypto:** Web Crypto, with AES-256-GCM in 4&nbsp;MB chunks and PBKDF2-SHA256 keys.
 - **Server:** a Cloudflare Worker that streams every byte straight through, plus one Durable Object that remembers codes, expiry, burns and rate limits.
 - **Storage:** the [nimbo.fun](https://nimbo.fun/docs) REST API.
+- **Design system:** colours, glass, components and motion are documented in [DESIGN.md](DESIGN.md), so you can build something else with the same look.
 
 <br>
 
