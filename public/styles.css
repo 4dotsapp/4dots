@@ -1092,12 +1092,16 @@ label.option {
 }
 
 .pin input {
+  --dot: color-mix(in srgb, var(--text-3) 60%, transparent);
   width: calc(var(--cell) * 0.76);
   height: var(--cell);
   padding: 0;
   border: 0;
   border-radius: 20px;
-  background: var(--well);
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--well);
+  background-repeat: no-repeat;
   box-shadow: inset 0 0 0 1px var(--hairline), inset 0 3px 10px rgb(0 0 0 / 0.12);
   color: var(--text);
   caret-color: transparent;
@@ -1105,16 +1109,23 @@ label.option {
   font-variant-numeric: tabular-nums;
   text-align: center;
   outline: none;
-  transition: box-shadow 0.25s var(--out), background 0.2s, transform 0.35s var(--spring);
+  transition: box-shadow 0.25s var(--out), background-color 0.2s, transform 0.35s var(--spring);
+}
+
+/* An empty box shows a dot. It's drawn rather than written as placeholder text,
+   because text sits differently inside fields across browsers: iOS Safari drops
+   it low while the field has focus. A drawn dot is centred everywhere. */
+.pin input:placeholder-shown {
+  background-image: radial-gradient(circle, var(--dot) 0 calc(var(--cell) * 0.054), transparent calc(var(--cell) * 0.054 + 0.75px));
 }
 
 .pin input::placeholder {
-  color: var(--text-3);
-  opacity: 0.6;
+  color: transparent;
 }
 
 .pin input:focus {
-  background: var(--fill);
+  --dot: color-mix(in srgb, var(--text) 90%, transparent);
+  background-color: var(--fill);
   box-shadow:
     inset 0 1px 0.5px var(--spec),
     inset 0 0 0 1.5px var(--focus),
@@ -1122,13 +1133,8 @@ label.option {
   transform: translateY(-2px);
 }
 
-.pin input:focus::placeholder {
-  color: var(--text);
-  opacity: 0.9;
-}
-
 .pin input.filled {
-  background: var(--fill-2);
+  background-color: var(--fill-2);
   box-shadow: inset 0 1px 0.5px var(--spec), inset 0 0 0 1px var(--hairline), var(--shadow-sm);
 }
 
