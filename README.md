@@ -63,6 +63,8 @@ same API as the Worker, so the frontend in `public/` works unchanged.
 git clone https://github.com/4dotsapp/4dots.git
 cd 4dots
 cp .env.example .env      # set FOURDOTS_DATA_DIR and, if needed, FOURDOTS_NETWORK
+# create the external network once, or point FOURDOTS_NETWORK at an existing one
+docker network inspect 4dots_default >/dev/null 2>&1 || docker network create 4dots_default
 docker compose up -d --build
 ```
 

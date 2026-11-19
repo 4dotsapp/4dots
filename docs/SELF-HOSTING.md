@@ -128,6 +128,7 @@ git clone https://github.com/4dotsapp/4dots.git
 cd 4dots
 cp .env.example .env
 # edit .env: FOURDOTS_DATA_DIR (SSD tier + state.db) and, if needed, the network
+docker network inspect 4dots_default >/dev/null 2>&1 || docker network create 4dots_default
 docker compose up -d --build
 ```
 
