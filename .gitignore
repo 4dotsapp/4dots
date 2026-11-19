@@ -1,7 +1,29 @@
+# Upstream Node / Worker tooling
 node_modules/
 .wrangler/
 .dev.vars*
+.DS_Store
+
+# Environment files: never commit real values
 .env
 .env.*
-.DS_Store
+!.env.example
 !.dev.vars.example
+
+# Self-hosted data: SSD tier, SQLite metadata, a local data directory
+drops/
+data/
+state.db
+state.db-wal
+state.db-shm
+
+# Python
+__pycache__/
+*.pyc
+
+# Deployment secrets and private operator notes
+DEPLOY-MAP.private.md
+credentials.json
+*.pem
+*.key
+cloudflared/

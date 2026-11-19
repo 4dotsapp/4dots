@@ -1,0 +1,38 @@
+name: 4dots-ram
+
+services:
+  fourdots:
+    build: .
+    container_name: 4dots
+    restart: unless-stopped
+    environment:
+      FOURDOTS_MAX_MB: "1024"           # largest drop, in MB
+      FOURDOTS_PART_MB: "64"           # upload part size, in MB
+      FOURDOTS_KDF_ITERATIONS: "600000" # PBKDF2 rounds (lower = faster on phones)
+      FOURDOTS_RAM_DIR: "/ram"          # tmpfs tier: 10 min / 1 hour drops
+      FOURDOTS_SSD_DIR: "/data/drops"   # SSD tier: 24 hour drops, and the overflow
+      FOURDOTS_RAM_MIN_MB: "2048"       # keep this much memory free before using RAM
+      FOURDOTS_RAM_MAX_MB: "0"          # 0 = 40% of total RAM
+      FOURDOTS_SWEEP_SECONDS: "15"      # how often the tier policy is enforced
+      FOURDOTS_ORPHAN_GRACE_SECONDS: "21600" # ignore unreferenced files this long (in-flight uploads)
+    volumes:
+      # The SSD tier and the app's home directory. Point this at a host
+      # directory; ./data is fine for a fresh install.
+      - ${FOURDOTS_DATA_DIR:-./data}:/data
+      # The RAM tier. Sized from the host's free memory, never from the whole box.
+      - type: tmpfs
+        target: /ram
+        tmpfs:
+          size: ${FOURDOTS_RAM_DISK_MB:-1024}m
+          mode: 0700
+    expose:
+      - "8080"
+    networks:
+      - tunnel
+
+# The tunnel container already lives on this network and resolves the app by
+# its container name, "4dots". Set FOURDOTS_NETWORK to that network's name.
+networks:
+  tunnel:
+    external: true
+    name: ${FOURDOTS_NETWORK:-4dots_default}

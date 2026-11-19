@@ -1252,12 +1252,50 @@ label.option {
   width: 100%;
   aspect-ratio: 1;
   object-fit: cover;
+  transition: scale 0.4s var(--out);
 }
 
 .gallery.single .shot img {
   aspect-ratio: auto;
   max-height: 420px;
   object-fit: contain;
+}
+
+/* A picture is decoded off-document and only then inserted. While that runs,
+   the figure holds the same box with a shimmer; the bitmap arrives complete,
+   fading and lifting into focus in one movement. */
+.shot.pending {
+  aspect-ratio: 1;
+}
+
+.gallery.single .shot.pending {
+  aspect-ratio: 4 / 3;
+}
+
+.shot-shimmer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(135deg, transparent 0 10px, var(--hairline) 10px 11px),
+    var(--well);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+
+.shot-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, var(--hairline), transparent);
+  transform: translateX(-110%);
+  animation: sweep 1.1s var(--out) infinite;
+}
+
+.shot.revealed img {
+  animation: rise 0.4s var(--out) backwards;
 }
 
 .shot figcaption {

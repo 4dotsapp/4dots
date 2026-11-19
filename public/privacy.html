@@ -80,6 +80,10 @@
       </ul>
       <p>Their servers may be outside your country, including outside the EU.</p>
 
+      <h2>Where the ciphertext lives</h2>
+      <p>Your encrypted drop is stored on the server that runs 4dots. Drops that expire in 10 minutes or an hour are held in memory (a tmpfs disk); drops that last a day are held on the server’s SSD. The server keeps at least 2 GB of memory free: when free memory falls below that, everything held in memory is moved to the SSD and new short-lived drops are written to the SSD instead. Moving a drop changes nothing about it: the same code, the same file names, the same bytes and the same expiry keep working.</p>
+      <p>Memory is not a backup. If the server restarts, reboots or loses power, drops that were held in memory are gone and their codes stop working. Use the 24-hour option for anything that must survive a restart.</p>
+
       <h2>On your device</h2>
       <p>4dots sets no cookies and loads nothing from other websites. It may save one setting in your browser: whether to use lighter animations on a slow device. When you share files to the installed app, they stay on your device only until 4dots opens them.</p>
 

@@ -434,7 +434,13 @@ async function send() {
   setProgress('send', { title: 'Reserving a code', sub: 'Picking a free four-digit slot', pct: null });
   go('send', 'progress');
   try {
-    const { code, reservation, pepper, partBytes } = await api('/api/drops', { method: 'POST' });
+    // The expiry is declared up front so the server can pick the storage tier
+    // before the first byte arrives: RAM for 10 min / 1 hour, SSD for 24 hours.
+    const { code, reservation, pepper, partBytes } = await api('/api/drops', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ttl }),
+    });
     setProgress('send', { title: 'Encrypting on your device', sub: 'AES-256-GCM, keyed by your code' });
     const sealed = await seal(code, pepper, bundle(text, files), (p) => {
       setProgress('send', { sub: `${Math.round(p * 100)}% · AES-256-GCM, keyed by your code`, pct: p });
@@ -692,10 +698,11 @@ async function receive(code) {
       if (err instanceof TypeError) throw new Error('The download was interrupted. Try again.');
       throw new Error('This drop couldn’t be decrypted.');
     }
-    renderResult(contents, { burn, expiresAt });
+    const pendingImages = renderResult(contents, { burn, expiresAt });
     setPin('');
     clearPinError();
     await go('receive', 'result');
+    revealImages(pendingImages);
   } catch (err) {
     await go('receive', 'enter', { dir: -1 });
     pinError(err.message);
@@ -722,6 +729,7 @@ function renderResult({ text, files }, { burn, expiresAt }) {
   state.resultUrls = [];
 
   const blocks = [];
+  const pendingImages = [];
   if (text) {
     blocks.push(h('section', { class: 'block' },
       h('div', { class: 'block-head' },
@@ -732,10 +740,15 @@ function renderResult({ text, files }, { burn, expiresAt }) {
   const images = files.filter((file) => PREVIEWABLE.has(file.type));
   const others = files.filter((file) => !PREVIEWABLE.has(file.type));
   if (images.length) {
-    blocks.push(h('section', { class: `block gallery${images.length === 1 ? ' single' : ''}` },
-      images.map((file) => h('figure', { class: 'shot' },
-        h('img', { src: objectUrl(new Blob([file.blob], { type: file.type })), alt: file.name }),
-        h('figcaption', {}, h('span', {}, file.name), downloadLink(file, 'icon-btn'))))));
+    const single = images.length === 1;
+    blocks.push(h('section', { class: `block gallery${single ? ' single' : ''}` },
+      images.map((file) => {
+        const figure = h('figure', { class: 'shot pending' },
+          h('span', { class: 'shot-shimmer', 'aria-hidden': 'true' }),
+          h('figcaption', {}, h('span', {}, file.name), downloadLink(file, 'icon-btn')));
+        pendingImages.push({ figure, file, single });
+        return figure;
+      })));
   }
   if (others.length) {
     blocks.push(h('section', { class: 'block' },
@@ -752,6 +765,50 @@ function renderResult({ text, files }, { burn, expiresAt }) {
   $('#result-meta').textContent = burn
     ? 'Burned on opening. It’s gone from the server.'
     : `Still available for ${formatDuration(expiresAt - Date.now())}`;
+  return pendingImages;
+}
+
+/* Decode each preview off-document, then reveal it in one frame. Chromium can
+   paint a large JPEG in passes; an <img> that is already in the document shows
+   those passes. A fully decoded bitmap cannot. */
+const IMAGE_DECODE_TIMEOUT_MS = 4000;
+
+function revealImages(items) {
+  for (const item of items) revealImage(item).catch(() => {});
+}
+
+async function revealImage({ figure, file, single }) {
+  const img = h('img', { alt: file.name, decoding: 'async' });
+  const url = objectUrl(new Blob([file.blob], { type: file.type }));
+
+  // Dimensions are known before decode finishes: match the placeholder's box to
+  // the final one so revealing never shifts the page.
+  let markSized;
+  const sized = new Promise((resolve) => { markSized = resolve; });
+  img.addEventListener('load', markSized, { once: true });
+  img.addEventListener('error', markSized, { once: true });
+  img.src = url;
+  if (img.complete) markSized();
+
+  sized.then(() => {
+    if (!single || figure.classList.contains('revealed') || !img.naturalWidth || !img.naturalHeight) return;
+    const width = figure.clientWidth;
+    if (!width) return;
+    const height = Math.min((width * img.naturalHeight) / img.naturalWidth, 420);
+    figure.style.aspectRatio = `${width} / ${height}`;
+  });
+
+  const decoded = typeof img.decode === 'function' ? img.decode().catch(() => {}) : sized;
+  await Promise.race([decoded, new Promise((resolve) => setTimeout(resolve, IMAGE_DECODE_TIMEOUT_MS))]);
+
+  img.style.scale = '0.985';
+  figure.classList.remove('pending');
+  figure.classList.add('revealed');
+  figure.querySelector('.shot-shimmer')?.remove();
+  figure.prepend(img);
+  void img.offsetWidth;  // commit the starting scale so the lift is animated
+  img.style.scale = '';
+  if (single) requestAnimationFrame(() => { figure.style.aspectRatio = ''; });
 }
 
 /* ───────────── card actions ───────────── */
