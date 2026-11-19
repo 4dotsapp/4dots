@@ -11,13 +11,17 @@ const MAGIC = new TextEncoder().encode('NMB2');
 const HEADER = 28;
 const CHUNK = 4 * 1024 * 1024;
 const TAG = 16;
-const ITERATIONS = 600_000;
+// Upstream hardcodes 600 000 PBKDF2 rounds. A self-hosted deployment can lower this
+// through /config.js to trade a little brute-force resistance for a faster key
+// derivation on phones. Sender and receiver must agree, so the value is served
+// by the same backend for both sides.
+const iterations = () => Number(globalThis.__FOURDOTS_KDF_ITERATIONS) || 600_000;
 const encoder = new TextEncoder();
 
 async function deriveKey(code, pepper, salt) {
   const material = await crypto.subtle.importKey('raw', encoder.encode(`${code}:${pepper}`), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: ITERATIONS },
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iterations() },
     material,
     { name: 'AES-GCM', length: 256 },
     false,

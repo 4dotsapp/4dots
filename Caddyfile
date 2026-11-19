@@ -1,0 +1,19 @@
+# Caddy handles TLS automatically (ACME). Point FOURDOTS_DOMAIN in compose.yaml
+# at a hostname whose A/AAAA record already points at this machine.
+{$FOURDOTS_DOMAIN} {
+	encode zstd gzip
+
+	# Stream straight through to the app: no buffering, no rewriting.
+	reverse_proxy fourdots:8080 {
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}
+
+# Note: Caddy has no default request-body limit, so large drops are fine.
+# On Caddy 2.10+ you can also add, inside the site block:
+#   request_body { max_size 2GB }
