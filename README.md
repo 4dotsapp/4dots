@@ -1,174 +1,124 @@
 <p align="center">
-  <img alt="4dots: Send a note or a file. Open it with four digits." src="docs/banner-dark.webp" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/4dots-mark-on-dark.png">
+    <img src="docs/brand/4dots-mark-on-light.png" alt="4dots logo: four dots, three neutral and one orange" width="96" height="96">
+  </picture>
+</p>
+
+<h1 align="center">4dots</h1>
+
+<p align="center">
+  <img src="docs/banner-dark.webp" alt="4dots banner reading “Send a note or a file. Open it with four digits.” beside a large 4861 code" width="1280" height="440">
 </p>
 
 <p align="center">
-  Text, images and files up to 1&nbsp;GB, encrypted in your browser and unlocked with a four-digit code that expires on its own.
+  <b>Send a note, photo or file. Open it with four digits.</b><br>
+  Free, no account, encrypted in your browser.
+</p>
+
+<h2 align="center"><a href="https://4dots.app">Open 4dots.app →</a></h2>
+
+<p align="center">
+  <kbd>free</kbd> &nbsp;·&nbsp; <kbd>no accounts</kbd> &nbsp;·&nbsp; <kbd>open source</kbd> &nbsp;·&nbsp; <kbd>self-hostable</kbd>
 </p>
 
 <p align="center">
-  <a href="https://4dots.app"><b>Open 4dots.app</b></a>
-  &nbsp;·&nbsp;
-  <a href="#self-hosted-backend"><b>Self-host</b></a>
-  &nbsp;·&nbsp;
-  <a href="#quick-start"><b>Quick start</b></a>
-  &nbsp;·&nbsp;
-  <a href="#how-it-works"><b>How it works</b></a>
-  &nbsp;·&nbsp;
-  <a href="#security"><b>Security</b></a>
-  &nbsp;·&nbsp;
-  <a href="docs/README.md"><b>Docs</b></a>
+  <sub><a href="#how-it-works">How it works</a> · <a href="#run-your-own-copy-optional">Run your own copy</a> · <a href="docs/README.md">Docs</a> · <a href="DEPLOY-MAP.md">Deploy map</a></sub>
 </p>
 
-<br>
+## What it is
+
+4dots is a small file-sharing service you open in a browser: write a note, add photos or files, and get a four-digit code like `4821`. Whoever has the code opens 4dots.app, types it, and gets the drop — no account, no app, no link to forward. Everything is encrypted in your browser before it is uploaded, so the service only ever stores ciphertext. Drops expire after 10 minutes, an hour or a day, and can be set to burn after the first open.
+
+**4dots.app is free, has no sign-up, and is open to everyone.** This repository is its source: the frontend, the encryption, the server and the tests. You can read it, audit it, improve it — and, if you want, run your own copy.
+
+## Why people use it
+
+- **Four digits, nothing else.** No account, no email, no install. Say the code, text it or share the link.
+- **Sealed on your device.** AES-256-GCM before anything leaves the browser; the server only sees ciphertext.
+- **Gone when it's done.** 10 minutes, 1 hour or 24 hours; burn after reading; delete early.
+- **Notes, photos and files up to 1 GB.** Pictures open in the drop with a preview.
+- **Open source.** The whole stack is here under the MIT licence.
+
+## See it
 
 <p align="center">
-  <img alt="4dots on a desktop browser and a phone" src="docs/hero-dark.webp" width="100%">
+  <img src="docs/hero-dark.webp" alt="The 4dots composer on a desktop browser and the code screen on a phone: a note, a sunset photo, a PDF, 1-hour expiry and burn after reading" width="1050" height="741" loading="lazy">
 </p>
-
-<br>
-
-- **Four digits, that's it.** Write a note or add files and get a code like `4821`. Say it, text it or share the link. No accounts.
-- **Sealed on your device.** Everything is encrypted with AES-256-GCM before it leaves the browser. The server and storage only see ciphertext.
-- **Gone when it's done.** Drops expire after 10&nbsp;minutes, an hour or a day, can burn after the first open, and can be deleted early.
-
-<br>
-
-## Self-hosted backend
-
-The same app can run against a small backend that writes ciphertext **straight to
-storage** — no Cloudflare Worker, no relay, no third-party storage. It speaks the
-same API as the Worker, so the frontend in `public/` works unchanged.
-
-- **One file, standard library.** `server.py` needs Python 3.10+ and nothing
-  else. It implements the same endpoints as the Worker and keeps metadata in a
-  small SQLite database (`state.db`).
-- **Same end-to-end encryption.** The browser still seals everything with
-  AES-256-GCM; the server only ever sees ciphertext. The PBKDF2 round count is
-  served to the browser via `/config.js`.
-- **Two storage tiers.** 10-minute and 1-hour drops are written to a **tmpfs**
-  (RAM); 24-hour drops are written to the **SSD**. When free memory falls below
-  2 GB, every RAM drop is migrated to the SSD and new short-lived drops go there
-  too. Codes, names, sizes and bytes are identical before and after.
-- **RAM is volatile.** A restart, reboot or power cut destroys RAM-tier drops;
-  their codes stop working. Use the 24-hour option for anything that must
-  survive. This is written into the terms, privacy page and status page.
-- **MIT.** `server.py` is MIT, under the repository's [`LICENSE`](LICENSE). The
-  frontend in `public/` is the upstream 4dots frontend, also MIT (see
-  [`LICENSE-4dots-frontend`](LICENSE-4dots-frontend)).
-
-### Quick start
-
-```sh
-git clone https://github.com/4dotsapp/4dots.git
-cd 4dots
-cp .env.example .env      # set FOURDOTS_DATA_DIR and, if needed, FOURDOTS_NETWORK
-# create the external network once, or point FOURDOTS_NETWORK at an existing one
-docker network inspect 4dots_default >/dev/null 2>&1 || docker network create 4dots_default
-docker compose up -d --build
-```
-
-`compose.yaml` runs one service, `fourdots` (container `4dots`), on internal port
-8080 and joins the external network in `FOURDOTS_NETWORK`. It has two volumes:
-
-- `${FOURDOTS_DATA_DIR}:/data` — the SSD tier (`/data/drops`) and `state.db`;
-- a tmpfs at `/ram` — the RAM tier, sized by `FOURDOTS_RAM_DISK_MB`.
-
-The variables that matter:
-
-| Variable | Default | What it does |
-|---|---|---|
-| `FOURDOTS_RAM_DIR` | `/ram` | RAM tier root. Must be a real tmpfs or the RAM tier is refused. |
-| `FOURDOTS_SSD_DIR` | `/data/drops` | SSD tier root. |
-| `FOURDOTS_RAM_MIN_MB` | `2048` | Free memory that must remain before the RAM tier is used. Below this, drops move to the SSD. |
-| `FOURDOTS_RAM_MAX_MB` | `0` | Cap on the RAM tier; `0` means 40 % of total memory. |
-| `FOURDOTS_ORPHAN_GRACE_SECONDS` | `21600` | Unreferenced files younger than this are treated as uploads in flight and are not deleted by the sweeper. |
-| `FOURDOTS_KDF_ITERATIONS` | `600000` | PBKDF2 rounds, served to the browser. |
-| `FOURDOTS_SWEEP_SECONDS` | `15` | Tier/expiry sweep interval. |
-| `FOURDOTS_DATA_DIR` | `./data` | Host directory mounted at `/data` (read by Compose from `.env`). |
-| `FOURDOTS_NETWORK` | `4dots_default` | External Docker network shared with the tunnel. |
-
-### Put it behind your own tunnel
-
-The deployment this repository is tested against uses a **locally-managed**
-Cloudflare tunnel: a `config.yml` with an ingress rule plus a `credentials.json`,
-run as a separate container on the same Docker network. The shape is:
-
-```yaml
-tunnel: <your-tunnel-id>
-credentials: /etc/cloudflared/credentials.json
-ingress:
-  - hostname: drop.example.com
-    service: http://4dots:8080
-  - service: http_status:404
-```
-
-```sh
-docker run --rm --network 4dots_default \
-  -v /path/to/cloudflared:/etc/cloudflared:ro \
-  cloudflare/cloudflared:latest \
-  tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
-```
-
-Keep the credentials and any tunnel token out of git. A token-managed tunnel
-(`cloudflared tunnel run --token …`) works too; configure the hostname in the
-dashboard.
-
-The full self-hosting guide — measured numbers, the exact API, migration
-guarantees, tuning and security notes — is in
-[docs/SELF-HOSTING.md](docs/SELF-HOSTING.md). Operators should start with
-[DEPLOY-MAP.md](DEPLOY-MAP.md).
-
-<br>
-
-## In motion
+<p align="center"><sub>The composer on a desktop and the code screen on a phone.</sub></p>
 
 <p align="center">
-  <img alt="Switching tabs and sending a drop: views slide through the glass with motion blur, then the code rolls in" src="docs/motion.gif" width="440">
+  <img src="docs/send.gif" alt="Screen recording of the send flow: choosing saturday-sunset.jpg, pressing Encrypt & get code, and the four-digit code 2731 rolling in" width="800" height="978" loading="lazy">
 </p>
-
-<p align="center"><sub>Views slide through the glass with real directional motion blur, then the code rolls in like a slot machine. The giant digits drifting behind everything are random. They just give the glass something to bend.</sub></p>
-
-<br>
-
-## Light and dark
+<p align="center"><sub><b>Send:</b> pick a file, press send, read the code. Recorded from 4dots.app.</sub></p>
 
 <p align="center">
-  <img alt="The same unlocked drop in dark and light themes" src="docs/themes.webp" width="100%">
+  <img src="docs/receive-reveal.gif" alt="Screen recording of the receive flow: the Unlocked card with a hatched placeholder, then the complete tall photo fading in" width="860" height="1052" loading="lazy">
 </p>
+<p align="center"><sub><b>Receive:</b> the picture is decoded before it is revealed, so it arrives complete — never half-painted.</sub></p>
 
+<p align="center">
+  <img src="docs/themes.webp" alt="The same unlocked drop in dark and light theme: a note, a sunset photo and a PDF" width="1050" height="875" loading="lazy">
+</p>
 <p align="center"><sub>Follows your system theme: warm black or paper, with one orange accent.</sub></p>
 
-<br>
-
-## On your phone
-
 <p align="center">
-  <img alt="Four phone screens: composing a drop, its code, entering a code and the unlocked drop" src="docs/phones.webp" width="100%">
+  <img src="docs/phones.webp" alt="Four phone screens: composing a note with a photo and a PDF, the code screen, entering the code, and the unlocked drop" width="1050" height="564" loading="lazy">
 </p>
-
 <p align="center"><sub>The whole form fits on one screen. Typing digits anywhere jumps straight into the code.</sub></p>
 
-<br>
+<p align="center">
+  <img src="docs/motion.gif" alt="Screen recording: switching tabs and sending a drop; views slide through glass and the code rolls in" width="440" height="599" loading="lazy">
+</p>
+<p align="center"><sub>Switching tabs and sending a drop. The giant digits drifting behind everything are random; they just give the glass something to bend.</sub></p>
 
 ## How it works
 
+4dots is end-to-end encrypted. Your browser derives a key from the four-digit code plus a per-code secret from the server, seals the note and files with AES-256-GCM, and uploads only ciphertext. The recipient's browser downloads it and decrypts it locally. **The server never sees the plaintext** — not the hosted service, and not your own copy.
+
 <p align="center">
-  <img alt="Your browser encrypts, the 4dots server relays ciphertext, nimbo.fun stores it, their browser decrypts" src="docs/flow-dark.webp" width="560">
+  <img src="docs/flow-dark.webp" alt="Diagram of the hosted path: your browser encrypts, the 4dots server relays ciphertext, nimbo.fun stores it, and the recipient's browser decrypts. Only ciphertext leaves a browser" width="840" height="450" loading="lazy">
 </p>
+<p align="center"><sub>The hosted path: the Worker relays ciphertext to nimbo.fun. It never has the key.</sub></p>
+
+**The self-hosted path** has no third-party storage in it:
+
+```mermaid
+flowchart LR
+  A[Your browser<br/>encrypts with AES-256-GCM] --> B[Your server]
+  B --> C[(RAM tier<br/>10 min / 1 h)]
+  B --> D[(SSD tier<br/>24 h)]
+```
 
 1. **You get a code.** The server reserves a free four-digit code and hands your browser a one-time upload token.
-2. **Your browser seals it.** The note and files are bundled and encrypted in 4&nbsp;MB chunks, with a key derived from the code (PBKDF2, 600k rounds) plus a per-code secret from the server.
-3. **The ciphertext is stored.** It goes up in parts of up to 90&nbsp;MB, which the server streams to [nimbo.fun](https://nimbo.fun) under random names. Your nimbo API key never reaches a browser.
-4. **They open it.** Their browser downloads the ciphertext and decrypts it as it arrives. Burn-after-reading drops are deleted the moment they're delivered.
+2. **Your browser seals it.** The note and files are bundled and encrypted in 4 MB chunks, with a key derived from the code (PBKDF2, 600k rounds) plus the per-code secret.
+3. **The ciphertext is stored.** On 4dots.app it goes to the hosted storage; in your own copy it goes straight to the RAM or disk tier.
+4. **They open it.** Their browser downloads the ciphertext and decrypts it as it arrives. Burn-after-reading drops are deleted once delivered.
 
-<br>
+## Quick start
 
-## Quick start: Cloudflare Worker
+### Use it
 
-The instructions in this section run the upstream Worker. For the self-hosted backend, see [Self-hosted backend](#self-hosted-backend).
+Open **[4dots.app](https://4dots.app)**. Free, no account, nothing to install. That is the whole setup.
 
-You need **Node 20+**.
+### Run your own copy (optional)
+
+For people who want their own instance: their own disk, their own uptime, and no third party or relay in the path.
+
+```sh
+git clone https://github.com/4dotsapp/4dots.git && cd 4dots
+cp .env.example .env      # edit if you use a tunnel
+docker compose up -d --build
+```
+
+Compose joins an external network for your tunnel or proxy. If you do not have one yet, create it first (`docker network create 4dots_default`) or set `FOURDOTS_NETWORK` to an existing network.
+
+24-hour drops land in `drops/` on the host disk (inside the `FOURDOTS_DATA_DIR` volume); the 10-minute and 1-hour tiers live in a tmpfs at `/ram` and disappear on restart. The full guide is in [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md); operators can start with [DEPLOY-MAP.md](DEPLOY-MAP.md).
+
+<details>
+<summary><b>Prefer the upstream Cloudflare Worker?</b></summary>
+
+The hosted 4dots.app runs this Worker. It is still a valid way to run 4dots; the self-hosted backend is just another option. You need **Node 20+**.
 
 ```sh
 git clone https://github.com/4dotsapp/4dots.git
@@ -178,8 +128,6 @@ npm run dev        # localhost:8787, against a mock of the nimbo API
 ```
 
 `npm run dev` never touches real storage, so you can play with it straight away.
-
-### Run your own
 
 4dots fits on the **Cloudflare Workers free plan**. You need a [nimbo.fun API key](https://nimbo.fun/profile) for storage.
 
@@ -191,46 +139,61 @@ npm run deploy
 
 Then add your domain under the Worker's **Settings → Domains & Routes**, or set `workers_dev` to `true` in `wrangler.jsonc` for a free `workers.dev` address. Configuration and the API are in the **[docs](docs/README.md)**.
 
-<br>
+</details>
+
+## 4dots.app vs your own copy
+
+| | **4dots.app** (hosted) | **Your own copy** |
+|---|---|---|
+| **Setup** | None — open the site. | Docker on a machine you control. |
+| **Storage** | Encrypted blobs on the hosted storage. | Your own RAM and disk. |
+| **Limits** | 1 GB per drop; 10 min / 1 h / 24 h. | The same limits, bounded by your disk and memory. |
+| **Who runs it** | The 4dots team. | You. |
+| **Best for** | Sending something now. | Your own instance, disk and uptime. |
+
+## Storage tiers (your own copy)
+
+The self-hosted backend keeps short-lived drops in memory and long-lived ones on disk:
+
+- **10 minutes and 1 hour → RAM** (a tmpfs at `/ram`). Fast, and gone on restart.
+- **24 hours → disk** (`drops/` on the host). Survives restarts.
+- **Below 2 GB free memory**, every drop held in RAM is moved to disk, and new short-lived drops are written to disk. Codes, names, sizes and bytes do not change.
+- **Memory is volatile.** A restart, reboot or power cut loses the short drops; use the 24-hour option for anything that must survive.
 
 ## Security
 
 > [!IMPORTANT]
 > A four-digit code is quick to share and also quick to guess: there are only 10,000 of them. 4dots is built for things that matter for minutes, not secrets that must stay secret forever.
 
-- **Storage can't read your drops.** nimbo.fun sees ciphertext under random names. It never learns the codes or the per-code secrets, so it can't brute-force them either.
+- **Client-side encryption.** The note and files are sealed in the browser with AES-256-GCM, using a key derived from the code (PBKDF2-SHA256, 600,000 rounds) plus a per-code secret from the server (the pepper).
+- **Storage only sees ciphertext.** On 4dots.app, nimbo.fun stores encrypted blobs under random names; in your own copy, your disk does. Neither learns the code or the pepper.
 - **Guessing is slowed down.** Drops expire, can burn after one open, and each IP gets 12 wrong codes per 10 minutes.
-- **Tampering fails loudly.** Every chunk is authenticated and numbered, so a reordered, cut-short or altered drop won't decrypt.
-- **The ceiling is honest.** Whoever runs the server holds the secret that makes the keys, and with 10,000 codes they could work them out. No four-digit design can avoid that.
-
-<br>
+- **Tampering fails loudly.** Every chunk is authenticated and numbered, so a reordered, cut-short or altered drop will not decrypt.
+- **The ceiling is honest.** Whoever runs the server holds the secret that makes the keys, and with 10,000 codes they could work them out. No four-digit design can avoid that. On 4dots.app that secret belongs to the service; if you run your own copy, it belongs to you.
 
 ## Under the hood
 
-- **Frontend:** plain HTML, CSS and JavaScript modules. No framework, no build step.
-- **Glass:** `backdrop-filter` with rim lighting and a pointer-following sheen. In Chromium, an SVG displacement map bends the backdrop at the edges like a glass rod.
-- **Motion:** animation-frame tweens that blur each moving element along its direction of travel, in proportion to its speed. Devices that can't hold about 40 fps get a lighter mode automatically.
-- **Crypto:** Web Crypto, with AES-256-GCM in 4&nbsp;MB chunks and PBKDF2-SHA256 keys.
-- **Server:** a Cloudflare Worker that streams every byte straight through, plus one Durable Object that remembers codes, expiry, burns and rate limits.
-- **Storage:** the [nimbo.fun](https://nimbo.fun/docs) REST API.
-- **Design system:** colours, glass, components and motion are documented in [DESIGN.md](DESIGN.md), so you can build something else with the same look.
-
-<br>
-
-## Licence
-
-MIT — see [`LICENSE`](LICENSE). The frontend in `public/` is the upstream 4dots
-frontend, MIT, © the 4dots authors (see
-[`LICENSE-4dots-frontend`](LICENSE-4dots-frontend)). The self-hosted backend
-(`server.py`, `bench.py`, `e2e_test.py`, `test_tiers.py`, `Dockerfile`,
-`compose.yaml`) is MIT under the same licence.
+- **One Python file.** The self-hosted backend is `server.py`, standard library only: no database server, no cloud storage account. Metadata lives in SQLite; ciphertext lives in a tmpfs and on disk.
+- **Frontend.** Plain HTML, CSS and JavaScript modules. No framework, no build step.
+- **Crypto.** Web Crypto, with AES-256-GCM in 4 MB chunks and PBKDF2-SHA256 keys.
+- **The reveal.** On the Receive tab, pictures are decoded off-document and only then inserted, so a large JPEG never paints half an image.
+- **The hosted path.** A Cloudflare Worker streams every byte through, plus one Durable Object that remembers codes, expiry, burns and rate limits. Storage is the [nimbo.fun](https://nimbo.fun/docs) REST API.
+- **Motion.** Animation-frame tweens that blur each moving element along its direction of travel, in proportion to its speed. Devices that cannot hold about 40 fps get a lighter mode automatically.
+- **Design system.** Colours, glass, components and motion are documented in [DESIGN.md](DESIGN.md).
 
 ## Contributing
 
 Issues and pull requests are welcome. Found a security problem? Please report it privately, as described in [SECURITY.md](SECURITY.md).
 
+## License
+
+MIT — see [`LICENSE`](LICENSE). The frontend in `public/` is the upstream 4dots frontend, MIT, © the 4dots authors (see [`LICENSE-4dots-frontend`](LICENSE-4dots-frontend)). The self-hosted backend (`server.py`, `bench.py`, `e2e_test.py`, `test_tiers.py`, `Dockerfile`, `compose.yaml`) is MIT under the same licence.
+
 <br>
 
 <p align="center">
-  <sub><a href="https://4dots.app">4dots.app</a> · <a href="LICENSE">MIT licensed</a> · <a href="https://4dots.app/privacy">Privacy</a> · <a href="https://4dots.app/terms">Terms</a> · <a href="https://4dots.app/dmca">DMCA</a> · Storage by <a href="https://nimbo.fun">nimbo.fun</a></sub>
+  <img src="public/icon-512.png" alt="4dots app icon" width="40" height="40" loading="lazy">
+</p>
+<p align="center">
+  <sub><a href="https://4dots.app">4dots.app</a> · <a href="LICENSE">MIT licensed</a> · <a href="https://4dots.app/privacy">Privacy</a> · <a href="https://4dots.app/terms">Terms</a> · <a href="https://4dots.app/dmca">DMCA</a> · Hosted storage by <a href="https://nimbo.fun">nimbo.fun</a></sub>
 </p>
