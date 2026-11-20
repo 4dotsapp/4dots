@@ -1967,7 +1967,6 @@ label.option {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 /* No throughput yet: a dim sweep, never a made-up number. */

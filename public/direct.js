@@ -16,10 +16,28 @@ const ACK_EVERY = 16;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Empty string when Direct can run; otherwise the plain reason it cannot. */
+export function directSupportIssue() {
+  if (typeof RTCPeerConnection !== 'function') {
+    return 'WebRTC is unavailable or disabled in this browser.';
+  }
+  if (!window.isSecureContext) {
+    return `Direct needs HTTPS or localhost (this page is ${location.origin}).`;
+  }
+  try {
+    // A constructor can exist while a policy/extension still blocks it.
+    const probe = new RTCPeerConnection();
+    const ok = typeof probe.createDataChannel === 'function';
+    probe.close();
+    if (!ok) return 'This browser has no WebRTC data channels.';
+  } catch {
+    return 'WebRTC could not start in this browser.';
+  }
+  return '';
+}
+
 export function directSupported() {
-  return typeof RTCPeerConnection === 'function'
-    && typeof RTCSessionDescription === 'function'
-    && window.isSecureContext;
+  return directSupportIssue() === '';
 }
 
 function isStunUrl(url) {

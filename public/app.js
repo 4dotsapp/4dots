@@ -1,8 +1,8 @@
 import { bundle, unbundle, seal, unseal } from './crypto.js';
 import {
-  createSession, decryptTransfer, describeConnection, directSupported, endSession, iceCandidate,
-  isPeerConnected, joinSession, loadDirectConfig, makePeer, pollSession, postSignal, preferredChunk,
-  receiveSealed, remoteDescription, sendSealed, watchConnection,
+  createSession, decryptTransfer, describeConnection, directSupportIssue, endSession, iceCandidate,
+  isPeerConnected, joinSession, loadDirectConfig, makePeer, pollSession, postSignal,
+  preferredChunk, receiveSealed, remoteDescription, sendSealed, watchConnection,
 } from './direct.js';
 import { createSpeedometer } from './speedometer.js';
 import { ease, holdBackdrop, judgeFrames, motionBlur, prefersReducedMotion, rollDigits, tween } from './motion.js';
@@ -431,8 +431,9 @@ function setMode(side, mode) {
       toast('Direct mode is not available on this deployment.', 'error');
       return;
     }
-    if (!directSupported()) {
-      toast('This browser cannot open a direct data channel. Server mode still works.', 'error');
+    const issue = directSupportIssue();
+    if (issue) {
+      toast(`${issue} Server mode still works.`, 'error');
       return;
     }
   }
@@ -1666,12 +1667,13 @@ api('/api/config')
     }
     state.directConfig = direct;
     for (const row of modeRows) row.hidden = false;
-    if (!directSupported()) {
+    const issue = directSupportIssue();
+    if (issue) {
       for (const button of modeButtons.filter((el) => el.dataset.mode === 'direct')) {
         // Keep it focusable so a click or key press can explain why, rather
         // than leaving a dead control with no message.
         button.setAttribute('aria-disabled', 'true');
-        button.title = 'This browser cannot open a direct data channel.';
+        button.title = issue;
       }
     }
     if (state.pendingDirectLink) {
