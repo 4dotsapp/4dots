@@ -1874,11 +1874,14 @@ label.option {
 }
 
 .direct-sub {
-  min-height: 19px;
+  /* Two lines are reserved so percentage updates cannot move the gauge. */
+  min-height: 38px;
   max-width: 36ch;
   margin: 0;
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
   text-wrap: balance;
 }
 
@@ -1890,6 +1893,15 @@ label.option {
   width: 100%;
   max-width: 320px;
   margin: 4px auto 0;
+}
+
+.direct-hint {
+  max-width: 38ch;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-wrap: balance;
 }
 
 .direct .actions {
@@ -1919,7 +1931,7 @@ label.option {
 
 .speedo-track {
   fill: none;
-  stroke: var(--fill-2);
+  stroke: var(--fill-3);
   stroke-width: 6;
   stroke-linecap: round;
 }
@@ -1930,7 +1942,7 @@ label.option {
 }
 
 .speedo-scale-label {
-  fill: var(--text-3);
+  fill: var(--text-2);
   font: 10px var(--font);
   font-variant-numeric: tabular-nums;
 }
@@ -1963,7 +1975,7 @@ label.option {
 }
 
 .speedo-unit-text {
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1992,7 +2004,7 @@ label.option {
 }
 
 .speedo-fuel-label {
-  color: var(--text-3);
+  color: var(--text-2);
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -2017,7 +2029,8 @@ label.option {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: var(--accent);
+  /* One accent per screen: the needle. The time-left fuel is ink. */
+  background: var(--text-2);
   transform-origin: left;
   transition: transform 0.45s var(--out);
 }

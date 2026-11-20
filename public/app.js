@@ -396,6 +396,7 @@ const directEls = {
     state: $('#direct-send-state'),
     sub: $('#direct-send-sub'),
     meter: $('#direct-send-meter'),
+    hint: $('#direct-send-hint'),
     actions: $('#direct-send-actions'),
     subactions: $('#direct-send-subactions'),
     newButton: $('#direct-send-new'),
@@ -406,6 +407,7 @@ const directEls = {
     state: $('#direct-receive-state'),
     sub: $('#direct-receive-sub'),
     meter: $('#direct-receive-meter'),
+    hint: $('#direct-receive-hint'),
     actions: null,
     subactions: $('#direct-receive-subactions'),
     newButton: null,
@@ -475,6 +477,7 @@ for (const button of modeButtons) {
 function newDirect(side, code = '') {
   const meter = meterFor(side);
   meter.reset();
+  if (directEls[side].hint) directEls[side].hint.hidden = true;
   return {
     side, code, token: '', pepper: '', expiresAt: 0, ttl: state.ttl,
     total: 0, sentBytes: 0, receivedBytes: 0,
@@ -614,6 +617,13 @@ function attachPeer(d) {
     if (state.direct !== d) return;
     d.link = info.label;
     d.meter.setLink(info.label);
+    const hint = directEls[d.side].hint;
+    if (hint) {
+      hint.hidden = info.kind !== 'internet';
+      if (info.kind === 'internet') {
+        hint.textContent = 'Using your internet path. If both devices are on the same Wi-Fi, local traffic is blocked by a VPN, AP isolation or mDNS.';
+      }
+    }
     if (info.kind === 'relay') {
       failDirect(d, 'This connection went through a relay, so it is not direct. Server mode is the honest alternative.');
       return;
@@ -663,6 +673,7 @@ function failDirect(d, message) {
   d.failed = true;
   clearTimeout(d.connectTimer);
   d.phase = 'failed';
+  if (directEls[d.side].hint) directEls[d.side].hint.hidden = true;
   setDirectStatus(d.side, 'Connection failed', message);
   d.meter.setSpeed(null);
   d.meter.setEta(null);
