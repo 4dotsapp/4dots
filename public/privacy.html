@@ -43,6 +43,7 @@
       <h2>The short version</h2>
       <ul>
         <li>Your notes and files are encrypted on your device before they’re uploaded. We only ever store that encrypted data.</li>
+        <li>Direct mode is different: the file goes straight from your device to the other device over an encrypted connection and is never stored. Both devices must stay online.</li>
         <li>No accounts, no cookies, no ads, no analytics and no tracking. We don’t sell or share your data.</li>
         <li>Every drop deletes itself after 10 minutes, an hour or a day, or right after it’s opened if you choose burn after reading.</li>
       </ul>
@@ -53,12 +54,14 @@
       <h2>What we can’t see</h2>
       <p>Your browser encrypts your note, your files and their names with AES-256-GCM before anything leaves your device, and the recipient’s browser decrypts them. Our storage provider never receives readable content or your code. Our server sees which code is being opened, but only ever handles encrypted data.</p>
       <p>The key comes from your four-digit code plus a per-code secret held by our server. Because a code has only 10,000 possibilities, whoever runs the server could in principle work out keys. We never try to, and it’s why 4dots is meant for things that matter for minutes, not secrets that must stay secret for years.</p>
+      <p>In Direct mode the same key is used, but the encrypted file travels over a direct WebRTC connection between the two browsers. Our server never receives the ciphertext, and neither do we.</p>
 
       <h2>What we handle, and why</h2>
       <ul>
-        <li><strong>Encrypted drops</strong>, so the recipient can download them.</li>
+        <li><strong>Encrypted drops</strong> in Server mode, so the recipient can download them later.</li>
         <li><strong>Drop details</strong>: each drop’s size, when it was created and expires, whether it burns after reading, and a fingerprint of the token that lets the sender delete it early. We need these to deliver and delete drops.</li>
         <li><strong>IP addresses</strong>, counted briefly to limit how many drops one address can create and how many wrong codes it can try. This is what stops codes from being guessed.</li>
+        <li><strong>Direct session details</strong>: a code, when it was created and expires, a fingerprint of each peer’s session token, and the connection set-up messages (SDP and ICE candidates). Those messages contain the two devices’ IP addresses, so the server sees both peers’ addresses while a Direct session is open. We keep them only for the session and delete them when it ends or expires; they never contain file content or file names.</li>
         <li><strong>Technical logs</strong>: our hosting provider keeps short-lived records of requests and errors, which can include IP addresses and browser details, so we can run and fix the service.</li>
         <li><strong>Emails you send us</strong>: your address and message, used only to reply.</li>
       </ul>
@@ -68,6 +71,7 @@
       <ul>
         <li><strong>Drops:</strong> until they expire, are opened with burn after reading, or are deleted by the sender. The stored data is deleted straight after. There are no backups.</li>
         <li><strong>Unfinished uploads:</strong> deleted 15 minutes after the last activity.</li>
+        <li><strong>Direct sessions:</strong> until the transfer finishes, either device cancels, or the session expires (at most the chosen lifetime, 10 minutes to a day). A session nobody joins is removed after 15 minutes.</li>
         <li><strong>Rate-limit counters:</strong> they reset after 10 minutes and are deleted within an hour.</li>
         <li><strong>Technical logs:</strong> a few days.</li>
         <li><strong>Emails:</strong> as long as it takes to deal with your message.</li>
@@ -77,15 +81,17 @@
       <ul>
         <li><strong>Cloudflare</strong> hosts the site and the server, protects them from attacks, and forwards emails sent to 4dots.app addresses. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare’s privacy policy</a>.</li>
         <li><strong>Storage where the instance runs.</strong> The instance you are using stores the ciphertext itself: the RAM tier for 10-minute and 1-hour drops and the SSD tier for 24-hour drops, on the machine that runs the instance. That is the only place the ciphertext exists. If you run the Cloudflare Worker flavour yourself, that flavour stores the ciphertext on <a href="https://nimbo.fun">nimbo.fun</a> under random names; nimbo receives only encrypted data, and the blob is deleted when the drop expires.</li>
+        <li><strong>STUN servers</strong>, in Direct mode only. A STUN server helps two devices discover a network path to each other. By default 4dots uses public STUN servers (Cloudflare and Google), which see your IP address and the connection attempt but never your file. A self-hosted instance can be configured to use its own STUN server instead; Direct mode never uses a TURN relay, so no third party carries the file.</li>
       </ul>
       <p>Their servers may be outside your country, including outside the EU.</p>
 
       <h2>Where the ciphertext lives</h2>
       <p>Your encrypted drop is stored on the server that runs 4dots. Drops that expire in 10 minutes or an hour are held in memory (a tmpfs disk); drops that last a day are held on the server’s SSD. The server keeps at least 2 GB of memory free: when free memory falls below that, everything held in memory is moved to the SSD and new short-lived drops are written to the SSD instead. Moving a drop changes nothing about it: the same code, the same file names, the same bytes and the same expiry keep working.</p>
       <p>Memory is not a backup. If the server restarts, reboots or loses power, drops that were held in memory are gone and their codes stop working. Use the 24-hour option for anything that must survive a restart.</p>
+      <p>Direct transfers are not stored at all, in memory or on disk. The ciphertext goes straight from the sender’s browser to the recipient’s, so there is nothing to recover if either device closes the page or disconnects.</p>
 
       <h2>On your device</h2>
-      <p>4dots sets no cookies and loads nothing from other websites. It may save one setting in your browser: whether to use lighter animations on a slow device. When you share files to the installed app, they stay on your device only until 4dots opens them.</p>
+      <p>4dots sets no cookies and loads nothing from other websites. It may save one setting in your browser: whether to use lighter animations on a slow device. When you share files to the installed app, they stay on your device only until 4dots opens them. In Direct mode your browser opens a WebRTC data channel straight to the other device and keeps the decrypted file in memory only while you look at it.</p>
 
       <h2>Your rights</h2>
       <p>Depending on where you live, for example under the GDPR, you can ask to access, correct or delete personal data we hold about you, object to how we use it, and complain to your data protection authority. With no accounts and almost nothing kept, there’s usually little or nothing we can link to you, but write to <a href="mailto:support@4dots.app">support@4dots.app</a> and we’ll help.</p>
@@ -96,7 +102,7 @@
       <h2>Changes</h2>
       <p>If this policy changes, we’ll update this page and the date below.</p>
 
-      <p class="updated">Last updated 2 October 2026</p>
+      <p class="updated">Last updated 20 November 2026</p>
     </main>
 
     <footer class="foot">

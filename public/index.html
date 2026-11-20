@@ -154,6 +154,13 @@
 
         <!-- Send: compose -->
         <section class="view active" data-view="send-compose">
+          <div class="mode-row" hidden>
+            <span class="mode-label">Mode</span>
+            <div class="mode-switch" role="radiogroup" aria-label="Send mode" data-side="send">
+              <button type="button" role="radio" data-mode="server" aria-checked="true">Server</button>
+              <button type="button" role="radio" data-mode="direct" aria-checked="false" tabindex="-1">Direct</button>
+            </div>
+          </div>
           <label class="sr-only" for="note">Message</label>
           <!-- Not a login form: the ignore markers keep password managers from offering to save or fill it. -->
           <textarea id="note" class="note" rows="4" placeholder="Write a message, paste a link or a secret…" spellcheck="false" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other"></textarea>
@@ -227,8 +234,36 @@
           </div>
         </section>
 
+        <!-- Send: direct, device to device -->
+        <section class="view" data-view="send-direct" aria-live="polite">
+          <div class="direct" id="direct-send">
+            <p class="eyebrow">Direct · device to device</p>
+            <div class="direct-code" id="direct-send-code" role="img" aria-label="Your Direct code"></div>
+            <p class="direct-state" id="direct-send-state">Waiting for the recipient</p>
+            <p class="direct-sub" id="direct-send-sub">Keep this tab open. Both devices must stay online.</p>
+            <div class="speedo-slot" id="direct-send-meter"></div>
+            <div class="actions" id="direct-send-actions">
+              <button type="button" class="btn btn-glass" data-action="direct-copy-code"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg>Copy code</button>
+              <button type="button" class="btn btn-glass" data-action="direct-copy-link"><svg class="i" aria-hidden="true"><use href="#i-link"/></svg>Copy link</button>
+              <button type="button" class="btn btn-glass" data-action="direct-qr"><svg class="i" aria-hidden="true"><use href="#i-qr"/></svg>QR code</button>
+            </div>
+            <div class="subactions" id="direct-send-subactions">
+              <button type="button" class="text-btn danger" data-action="direct-cancel"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg><span>Cancel</span></button>
+              <button type="button" class="text-btn" data-action="direct-fallback"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>Use Server instead</button>
+            </div>
+            <button type="button" class="btn btn-primary wide" id="direct-send-new" data-action="direct-new" hidden><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New drop</button>
+          </div>
+        </section>
+
         <!-- Receive: enter code -->
         <section class="view" data-view="receive-enter">
+          <div class="mode-row" hidden>
+            <span class="mode-label">Mode</span>
+            <div class="mode-switch" role="radiogroup" aria-label="Receive mode" data-side="receive">
+              <button type="button" role="radio" data-mode="server" aria-checked="true">Server</button>
+              <button type="button" role="radio" data-mode="direct" aria-checked="false" tabindex="-1">Direct</button>
+            </div>
+          </div>
           <div class="enter">
             <p class="eyebrow" id="pin-label">Enter the code</p>
             <div class="pin" id="pin" role="group" aria-labelledby="pin-label">
@@ -252,6 +287,20 @@
             <h2 class="progress-title">Finding your drop</h2>
             <p class="progress-sub">&nbsp;</p>
             <div class="bar indeterminate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><span></span></div>
+          </div>
+        </section>
+
+        <!-- Receive: direct, device to device -->
+        <section class="view" data-view="receive-direct" aria-live="polite">
+          <div class="direct" id="direct-receive">
+            <p class="eyebrow">Direct · device to device</p>
+            <p class="direct-state" id="direct-receive-state">Connecting…</p>
+            <p class="direct-sub" id="direct-receive-sub">&nbsp;</p>
+            <div class="speedo-slot" id="direct-receive-meter"></div>
+            <div class="subactions" id="direct-receive-subactions">
+              <button type="button" class="text-btn danger" data-action="direct-cancel"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg><span>Cancel</span></button>
+              <button type="button" class="text-btn" data-action="direct-fallback"><svg class="i" aria-hidden="true"><use href="#i-upload"/></svg>Use Server instead</button>
+            </div>
           </div>
         </section>
 
@@ -280,10 +329,11 @@
             <li><span><strong>Your browser encrypts.</strong> Everything is sealed with AES-256-GCM under a key derived from the code (PBKDF2, 600k rounds) and a server-side secret. Only ciphertext is uploaded.</span></li>
             <li><span><strong>They enter the code.</strong> Their browser downloads the ciphertext and decrypts it locally. Storage never sees your content or your code.</span></li>
           </ol>
+          <p class="how-direct"><strong>Direct mode</strong> skips storage entirely: your browser connects straight to the other device and the file never passes through the server. Both devices have to stay online, and only the connection details are exchanged.</p>
           <p class="caveat">Four digits are quick to share but also quick to guess, so drops expire, can burn after one open, and wrong guesses are rate-limited. Use it for things that matter for minutes, not secrets that must stay secret forever.</p>
         </div>
       </details>
-      <p class="fine reveal d4">AES-256-GCM in your browser · stored on the server that runs it</p>
+      <p class="fine reveal d4">AES-256-GCM in your browser · Server mode stores it, Direct stays device to device</p>
       <p class="fine legal reveal d4"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/dmca">DMCA</a><a href="/status">Status</a></p>
     </footer>
   </div>

@@ -1,4 +1,9 @@
 import { bundle, unbundle, seal, unseal } from './crypto.js';
+import {
+  createSession, decryptTransfer, describeConnection, directSupported, endSession, joinSession,
+  loadDirectConfig, makePeer, pollSession, postSignal, receiveSealed, sendSealed, watchConnection,
+} from './direct.js';
+import { createSpeedometer } from './speedometer.js';
 import { ease, holdBackdrop, judgeFrames, motionBlur, prefersReducedMotion, rollDigits, tween } from './motion.js';
 import { lens } from './lens.js';
 import { liquidSlider } from './slider.js';
@@ -33,6 +38,7 @@ const openBtn = $('#open-btn');
 const state = {
   tab: 'send',
   view: { send: 'compose', receive: 'enter' },
+  mode: { send: 'server', receive: 'server' },
   files: [], // { id, file, url }
   ttl: 3600,
   maxBytes: 1024 * 1024 * 1024,
@@ -41,6 +47,9 @@ const state = {
   sending: false,
   receiving: false,
   resultUrls: [],
+  directConfig: null, // /api/direct/config, or null when this deployment has no Direct mode
+  direct: null, // the active Direct transfer
+  pendingDirectLink: '',
 };
 
 /* ───────────── helpers ───────────── */
@@ -245,6 +254,10 @@ function refreshCompose() {
   composeHint.classList.toggle('idle', !tooBig && !state.files.length);
   if (tooBig) {
     composeHint.textContent = `That’s ${formatBytes(bytes)}. The limit is ${formatBytes(state.maxBytes)}.`;
+  } else if (state.mode.send === 'direct') {
+    composeHint.textContent = state.files.length
+      ? `${plural(state.files.length, 'file')} · ${formatBytes(bytes)} · sent device to device`
+      : 'Nothing is stored. Both devices must stay online for the whole transfer.';
   } else if (state.files.length) {
     composeHint.textContent = `${plural(state.files.length, 'file')} · ${formatBytes(bytes)} · encrypted before upload`;
   } else {
@@ -370,6 +383,584 @@ function setProgress(tab, { title, sub, pct } = {}) {
   }
 }
 
+/* ───────────── direct mode ───────────── */
+
+const modeButtons = $$('.mode-switch [data-mode]');
+const modeRows = $$('.mode-row');
+
+const directEls = {
+  send: {
+    root: $('#direct-send'),
+    code: $('#direct-send-code'),
+    state: $('#direct-send-state'),
+    sub: $('#direct-send-sub'),
+    meter: $('#direct-send-meter'),
+    actions: $('#direct-send-actions'),
+    subactions: $('#direct-send-subactions'),
+    newButton: $('#direct-send-new'),
+  },
+  receive: {
+    root: $('#direct-receive'),
+    code: null,
+    state: $('#direct-receive-state'),
+    sub: $('#direct-receive-sub'),
+    meter: $('#direct-receive-meter'),
+    actions: null,
+    subactions: $('#direct-receive-subactions'),
+    newButton: null,
+  },
+};
+
+// A closed tab cannot wait for the sweeper: drop the session best-effort. The
+// DataChannel close tells the other peer immediately either way.
+window.addEventListener('pagehide', () => {
+  const d = state.direct;
+  if (d?.code && d.token) endSession(d.code, d.token);
+});
+
+const meters = {};
+function meterFor(side) {
+  if (!meters[side]) meters[side] = createSpeedometer(directEls[side].meter);
+  return meters[side];
+}
+
+function setMode(side, mode) {
+  if (mode === 'direct') {
+    if (!state.directConfig) {
+      toast('Direct mode is not available on this deployment.', 'error');
+      return;
+    }
+    if (!directSupported()) {
+      toast('This browser cannot open a direct data channel. Server mode still works.', 'error');
+      return;
+    }
+  }
+  state.mode[side] = mode;
+  for (const button of modeButtons.filter((el) => el.closest('.mode-switch').dataset.side === side)) {
+    const selected = button.dataset.mode === mode;
+    button.setAttribute('aria-checked', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  }
+  const compose = views['send-compose'];
+  if (side === 'send') {
+    compose.classList.toggle('is-direct', mode === 'direct');
+    sendBtn.querySelector('span').textContent = mode === 'direct' ? 'Go direct' : 'Encrypt & get code';
+    burnToggle.closest('.option').hidden = mode === 'direct';
+    refreshCompose();
+  } else {
+    views['receive-enter'].classList.toggle('is-direct', mode === 'direct');
+    openBtn.querySelector('span').textContent = mode === 'direct' ? 'Connect' : 'Unlock';
+    const hint = $('.hint', views['receive-enter']);
+    hint.textContent = mode === 'direct'
+      ? 'Both devices stay online for the whole transfer. Nothing is stored on our server.'
+      : 'Decryption happens on this device. Burn-after-reading drops vanish once opened.';
+    pinMsg.textContent = '';
+  }
+}
+
+for (const button of modeButtons) {
+  button.addEventListener('click', () => setMode(button.closest('.mode-switch').dataset.side, button.dataset.mode));
+  button.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const side = button.closest('.mode-switch').dataset.side;
+    const next = state.mode[side] === 'server' ? 'direct' : 'server';
+    setMode(side, next);
+    button.closest('.mode-switch').querySelector(`[data-mode="${next}"]`)?.focus();
+  });
+}
+
+function newDirect(side, code = '') {
+  const meter = meterFor(side);
+  meter.reset();
+  return {
+    side, code, token: '', pepper: '', expiresAt: 0, ttl: state.ttl,
+    total: 0, sentBytes: 0, receivedBytes: 0,
+    pc: null, dc: null, rx: null, sealed: null,
+    poller: null, stopWatch: null, abort: new AbortController(),
+    timer: 0, expiryTimer: 0, pollGrace: 0, connectTimer: 0, queued: [],
+    lastBytes: 0, lastTime: 0, ema: 0, samples: 0,
+    phase: '', link: '', answered: false, finished: false, failed: false,
+    meter,
+  };
+}
+
+function setDirectStatus(side, title, sub) {
+  const els = directEls[side];
+  if (title !== undefined) els.state.textContent = title;
+  if (sub !== undefined) els.sub.textContent = sub || ' ';
+}
+
+function renderDirectCode(code) {
+  const el = directEls.send.code;
+  el.replaceChildren(...code.split('').map((digit) => h('span', {}, digit)));
+  el.setAttribute('aria-label', `Your Direct code is ${code.split('').join(' ')}`);
+}
+
+function startDirectClock(d) {
+  clearInterval(d.expiryTimer);
+  const tick = () => {
+    if (state.direct !== d || d.phase !== 'waiting' || d.failed) return;
+    const left = Math.max(0, d.expiresAt - Date.now());
+    if (!left) {
+      failDirect(d, 'The Direct session expired before the other device joined. Ask them to try again.');
+      return;
+    }
+    setDirectStatus(d.side, undefined, `Keep this tab open. Both devices must stay online · ends in ${formatDuration(left)}`);
+  };
+  tick();
+  d.expiryTimer = setInterval(tick, 1000);
+}
+
+function cleanupDirect(d, { removeSession = true } = {}) {
+  d.abort.abort();
+  d.poller?.stop();
+  d.poller = null;
+  d.stopWatch?.();
+  d.stopWatch = null;
+  clearInterval(d.timer);
+  clearInterval(d.expiryTimer);
+  clearTimeout(d.pollGrace);
+  clearTimeout(d.connectTimer);
+  d.connectTimer = 0;
+  d.timer = 0;
+  d.expiryTimer = 0;
+  d.pollGrace = 0;
+  try { d.rx?.close(); } catch { /* already closed */ }
+  try { d.dc?.close(); } catch { /* already closed */ }
+  try { d.pc?.close(); } catch { /* already closed */ }
+  d.rx = null;
+  d.dc = null;
+  d.pc = null;
+  if (removeSession && d.code && d.token) endSession(d.code, d.token);
+}
+
+function startSampling(d, readBytes) {
+  clearInterval(d.timer);
+  d.lastBytes = 0;
+  d.lastTime = performance.now();
+  d.ema = 0;
+  d.samples = 0;
+  const tick = () => {
+    if (state.direct !== d) return;
+    const now = performance.now();
+    const bytes = Math.max(0, Math.min(d.total || Infinity, readBytes()));
+    const seconds = (now - d.lastTime) / 1000;
+    const instant = seconds > 0 ? Math.max(0, ((bytes - d.lastBytes) * 8) / seconds / 1e6) : 0;
+    d.lastBytes = bytes;
+    d.lastTime = now;
+    d.samples++;
+    if (d.samples < 2) { d.meter.setBytes(bytes, d.total); return; }
+    d.ema = d.samples === 2 ? instant : d.ema * 0.7 + instant * 0.3;
+    const remaining = Math.max(0, (d.total || 0) - bytes);
+    const eta = remaining <= 0 ? 0 : d.ema > 0.05 ? remaining / ((d.ema * 1e6) / 8) : null;
+    d.meter.setSpeed(d.ema);
+    d.meter.setEta(eta);
+    d.meter.setBytes(bytes, d.total);
+  };
+  d.timer = setInterval(tick, 500);
+  tick();
+}
+
+function finishSampling(d) {
+  clearInterval(d.timer);
+  d.timer = 0;
+}
+
+async function refreshLink(d) {
+  if (!d.pc || d.failed || d.finished) return;
+  const info = await describeConnection(d.pc);
+  if (state.direct !== d) return;
+  d.link = info.label;
+  d.meter.setLink(info.label);
+  if (d.phase === 'transferring') {
+    setDirectStatus(d.side, 'Transferring', `${info.label} · device to device`);
+  }
+}
+
+function attachPeer(d) {
+  const { pc } = d;
+  pc.addEventListener('icecandidate', (event) => {
+    if (!event.candidate || !d.code || !d.token) return;
+    const candidate = event.candidate.toJSON?.() ?? {
+      candidate: event.candidate.candidate,
+      sdpMid: event.candidate.sdpMid,
+      sdpMLineIndex: event.candidate.sdpMLineIndex,
+    };
+    postSignal(d.code, d.token, 'candidate', candidate).catch(() => {});
+  });
+  pc.addEventListener('connectionstatechange', () => {
+    if (state.direct !== d || d.failed) return;
+    if (pc.connectionState === 'connected') {
+      clearTimeout(d.connectTimer);
+      refreshLink(d);
+      // The path is settled. A short grace lets the last candidates land, then
+      // the poll stops so the other peer's cleanup cannot produce a 404.
+      clearTimeout(d.pollGrace);
+      d.pollGrace = setTimeout(() => d.poller?.stop(), 750);
+    } else if (pc.connectionState === 'failed') {
+      failDirect(d, 'The two devices could not find a path to each other. Nothing was relayed.');
+    } else if (pc.connectionState === 'disconnected') {
+      setDirectStatus(d.side, d.phase === 'transferring' ? 'Reconnecting…' : 'Connecting',
+        'The direct connection dropped. Waiting for it to recover.');
+    }
+  });
+  d.stopWatch = watchConnection(pc, (info) => {
+    if (state.direct !== d) return;
+    d.link = info.label;
+    d.meter.setLink(info.label);
+    if (info.kind === 'relay') {
+      failDirect(d, 'This connection went through a relay, so it is not direct. Server mode is the honest alternative.');
+      return;
+    }
+    if (d.phase === 'transferring') {
+      setDirectStatus(d.side, 'Transferring', `${info.label} · device to device`);
+    } else if (d.phase === 'connecting' && info.kind !== 'unknown') {
+      setDirectStatus(d.side, 'Connecting', `${info.label} · finishing the handshake`);
+    }
+  });
+}
+
+async function addCandidate(d, data) {
+  if (!data || !d.pc) return;
+  const candidate = {
+    candidate: data.candidate,
+    sdpMid: data.sdpMid,
+    sdpMLineIndex: data.sdpMLineIndex,
+    usernameFragment: data.usernameFragment,
+  };
+  if (!d.pc.remoteDescription) { d.queued.push(candidate); return; }
+  try { await d.pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
+}
+
+async function flushCandidates(d) {
+  const queued = d.queued.splice(0);
+  for (const candidate of queued) {
+    try { await d.pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
+  }
+}
+
+/**
+ * ICE can sit in "connecting" for a long time when no path exists. After a
+ * bounded wait we say so, rather than leaving the user staring at a spinner.
+ */
+function armConnectWatchdog(d, seconds = 20) {
+  clearTimeout(d.connectTimer);
+  d.connectTimer = setTimeout(() => {
+    if (state.direct !== d || d.failed || d.finished) return;
+    if (d.pc?.connectionState === 'connected') return;
+    failDirect(d, 'The two devices could not reach each other in time. No relay was used, so use Server mode instead.');
+  }, seconds * 1000);
+}
+
+function failDirect(d, message) {
+  if (state.direct !== d || d.failed || d.finished) return;
+  d.failed = true;
+  clearTimeout(d.connectTimer);
+  d.phase = 'failed';
+  setDirectStatus(d.side, 'Connection failed', message);
+  d.meter.setSpeed(null);
+  d.meter.setEta(null);
+  d.meter.setLink('Not connected');
+  directEls[d.side].root.dataset.state = 'failed';
+  d.poller?.stop();
+  d.stopWatch?.();
+  clearInterval(d.timer);
+  clearInterval(d.expiryTimer);
+  try { d.dc?.close(); } catch { /* already closed */ }
+  try { d.pc?.close(); } catch { /* already closed */ }
+  if (d.code && d.token) endSession(d.code, d.token);
+}
+
+async function beginSending(d) {
+  d.phase = 'transferring';
+  setDirectStatus('send', 'Transferring', `${d.link || 'Connected'} · device to device`);
+  refreshLink(d);
+  startSampling(d, () => Math.max(0, d.sentBytes - (d.dc?.bufferedAmount || 0)));
+  try {
+    await sendSealed(d.dc, d.sealed, {
+      signal: d.abort.signal,
+      onSent: (sent, total) => { d.sentBytes = sent; d.meter.setBytes(sent, total); },
+    });
+    if (state.direct !== d) return;
+    d.sentBytes = d.total;
+    finishSampling(d);
+    await refreshLink(d);
+    d.finished = true;
+    d.meter.setBytes(d.total, d.total);
+    d.meter.setDone();
+    setDirectStatus('send', 'Done', 'Sent directly. Nothing was stored on the server.');
+    directEls.send.root.dataset.state = 'done';
+    directEls.send.actions.hidden = true;
+    directEls.send.subactions.hidden = true;
+    directEls.send.newButton.hidden = false;
+    d.finished = true;
+    clearCompose();
+    cleanupDirect(d);
+  } catch (err) {
+    if (err.cancelled || err.name === 'AbortError' || state.direct !== d) return;
+    failDirect(d, err.message);
+  }
+}
+
+function handleSenderSignal(d, event) {
+  if (state.direct !== d || d.failed || event.role === 'sender') return Promise.resolve();
+  if (event.kind === 'join') {
+    if (d.phase === 'waiting') {
+      d.phase = 'connecting';
+      setDirectStatus('send', 'Connecting', 'The recipient joined. Finding a path between the two devices.');
+      armConnectWatchdog(d);
+    }
+  } else if (event.kind === 'answer') {
+    d.phase = 'connecting';
+    return (async () => {
+      try {
+        await d.pc.setRemoteDescription({ type: 'answer', sdp: event.data.sdp });
+        await flushCandidates(d);
+      } catch (err) {
+        failDirect(d, 'The handshake failed. Try again, or use Server mode.');
+      }
+    })();
+  } else if (event.kind === 'candidate') {
+    return addCandidate(d, event.data);
+  } else if (event.kind === 'bye') {
+    failDirect(d, 'The recipient cancelled the Direct session.');
+  }
+  return Promise.resolve();
+}
+
+async function sendDirect() {
+  if (state.sending || sendBtn.disabled || !state.directConfig) return;
+  state.sending = true;
+  refreshCompose();
+  const text = note.value;
+  const files = state.files.map((entry) => entry.file);
+  const { ttl } = state;
+  const d = newDirect('send');
+  state.direct = d;
+  directEls.send.root.dataset.state = 'waiting';
+  directEls.send.actions.hidden = false;
+  directEls.send.subactions.hidden = false;
+  directEls.send.newButton.hidden = true;
+  renderDirectCode('••••');
+  setDirectStatus('send', 'Reserving a code', 'Direct sessions are metadata only: no file is stored.');
+  go('send', 'direct');
+
+  try {
+    const session = await createSession(ttl);
+    if (state.direct !== d) return;
+    d.code = session.code;
+    d.token = session.sessionToken;
+    d.pepper = session.pepper;
+    d.expiresAt = session.expiresAt;
+    renderDirectCode(d.code);
+    d.phase = 'waiting';
+    startDirectClock(d);
+    setDirectStatus('send', 'Encrypting on your device', 'AES-256-GCM, keyed by your code');
+    d.sealed = await seal(d.code, d.pepper, bundle(text, files), (p) => {
+      setDirectStatus('send', 'Encrypting on your device', `${Math.round(p * 100)}% · AES-256-GCM, keyed by your code`);
+    });
+    if (state.direct !== d) return;
+    d.total = d.sealed.size;
+    d.meter.setCompact(d.total <= 512 * 1024);
+    d.meter.setBytes(0, d.total);
+    setDirectStatus('send', 'Waiting for the recipient', `Keep this tab open. Both devices must stay online · ends in ${formatDuration(d.expiresAt - Date.now())}`);
+
+    const pc = makePeer(state.directConfig.stunUrls);
+    d.pc = pc;
+    attachPeer(d);
+    const dc = pc.createDataChannel('drop', { ordered: true });
+    d.dc = dc;
+    dc.addEventListener('open', () => { if (state.direct === d) beginSending(d); }, { once: true });
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await postSignal(d.code, d.token, 'offer', { type: offer.type, sdp: offer.sdp });
+
+    d.poller = pollSession({
+      code: d.code,
+      token: d.token,
+      since: 0,
+      onEvents: (event) => handleSenderSignal(d, event),
+      onEnded: (message) => failDirect(d, message),
+      onError: () => {},
+    });
+  } catch (err) {
+    if (state.direct !== d || err.cancelled) return;
+    failDirect(d, err.message);
+  } finally {
+    state.sending = false;
+    refreshCompose();
+  }
+}
+
+function handleReceiverSignal(d, event) {
+  if (state.direct !== d || d.failed || event.role === 'receiver') return Promise.resolve();
+  if (event.kind === 'offer') {
+    if (d.answered) return Promise.resolve();
+    d.answered = true;
+    return (async () => {
+      try {
+        await d.pc.setRemoteDescription({ type: 'offer', sdp: event.data.sdp });
+        await flushCandidates(d);
+        const answer = await d.pc.createAnswer();
+        await d.pc.setLocalDescription(answer);
+        await postSignal(d.code, d.token, 'answer', { type: answer.type, sdp: answer.sdp });
+        d.phase = 'connecting';
+        setDirectStatus('receive', 'Connecting', 'Answer sent. Finding a path between the two devices.');
+        armConnectWatchdog(d);
+      } catch {
+        failDirect(d, 'The handshake failed. Ask the sender to try again, or use Server mode.');
+      }
+    })();
+  }
+  if (event.kind === 'candidate') return addCandidate(d, event.data);
+  if (event.kind === 'bye') failDirect(d, 'The sender cancelled the Direct session.');
+  return Promise.resolve();
+}
+
+async function receiveTransfer(d) {
+  try {
+    const contents = await decryptTransfer(d.code, d.pepper, d.rx.stream, (bytes) => {
+      d.receivedBytes = bytes;
+    });
+    d.rx.ack();
+    try { d.dc.send(JSON.stringify({ t: 'done' })); } catch { /* closing */ }
+    d.rx.close();
+    finishSampling(d);
+    await refreshLink(d);
+    d.finished = true;
+    d.meter.setBytes(d.total, d.total);
+    d.meter.setDone();
+    setDirectStatus('receive', 'Done', 'Decrypted on this device. Nothing was stored on the server.');
+    const pendingImages = renderResult(contents, { direct: true });
+    setPin('');
+    clearPinError();
+    await go('receive', 'result');
+    revealImages(pendingImages);
+    cleanupDirect(d);
+  } catch (err) {
+    if (err.cancelled || err.name === 'AbortError' || state.direct !== d) return;
+    try { d.dc.send(JSON.stringify({ t: 'error', message: 'This transfer could not be decrypted.' })); } catch { /* closing */ }
+    failDirect(d, 'The transfer could not be decrypted. Try again, or ask the sender to use Server mode.');
+  }
+}
+
+function setupReceiverChannel(d) {
+  d.phase = 'connecting';
+  setDirectStatus('receive', 'Connecting', d.link ? `${d.link} · opening the data channel` : 'Opening the data channel');
+  d.dc.addEventListener('open', () => {
+    if (state.direct !== d) return;
+    d.phase = 'transferring';
+    refreshLink(d);
+    setDirectStatus('receive', 'Transferring', `${d.link || 'Connected'} · decrypting on your device`);
+  }, { once: true });
+  d.rx = receiveSealed(d.dc, {
+    onBegin: (total) => {
+      if (total > state.maxBytes) {
+        d.rx?.fail('That transfer is too large.');
+        failDirect(d, `That transfer is larger than the ${formatBytes(state.maxBytes)} limit.`);
+        return;
+      }
+      d.total = total;
+      d.meter.setCompact(total <= 512 * 1024);
+      d.meter.setBytes(0, total);
+      d.phase = 'transferring';
+      setDirectStatus('receive', 'Transferring', `${d.link || 'Connected'} · decrypting on your device`);
+      startSampling(d, () => d.receivedBytes);
+    },
+    onBytes: (got, total) => {
+      d.receivedBytes = got;
+      d.meter.setBytes(got, total || d.total);
+    },
+  });
+  receiveTransfer(d);
+}
+
+async function receiveDirect(code) {
+  if (state.receiving) return;
+  if (!state.directConfig) {
+    pinError('Direct mode is not available on this deployment.');
+    return;
+  }
+  state.receiving = true;
+  refreshPin();
+  document.activeElement?.blur();
+  const d = newDirect('receive', code);
+  state.direct = d;
+  directEls.receive.root.dataset.state = 'connecting';
+  directEls.receive.subactions.hidden = false;
+  setDirectStatus('receive', 'Connecting', 'Joining the Direct session and asking for the pepper.');
+  go('receive', 'direct');
+
+  try {
+    const session = await joinSession(code);
+    if (state.direct !== d) return;
+    d.token = session.sessionToken;
+    d.pepper = session.pepper;
+    d.expiresAt = session.expiresAt;
+    startDirectClock(d);
+    const pc = makePeer(state.directConfig.stunUrls);
+    d.pc = pc;
+    pc.ondatachannel = (event) => {
+      if (state.direct !== d) return;
+      d.dc = event.channel;
+      setupReceiverChannel(d);
+    };
+    attachPeer(d);
+    d.poller = pollSession({
+      code,
+      token: d.token,
+      since: 0,
+      onEvents: (event) => handleReceiverSignal(d, event),
+      onEnded: (message) => failDirect(d, message),
+      onError: () => {},
+    });
+    setDirectStatus('receive', 'Connecting', 'Waiting for the sender to offer a path.');
+    armConnectWatchdog(d, 25);
+  } catch (err) {
+    if (state.direct !== d) return;
+    failDirect(d, err.status === 404
+      ? 'No Direct session matches that code. It may have ended, or the sender may be using Server mode.'
+      : err.message);
+  } finally {
+    state.receiving = false;
+    refreshPin();
+  }
+}
+
+function cancelDirectFlow(side) {
+  const d = state.direct;
+  state.direct = null;
+  if (d) cleanupDirect(d);
+  directEls[side].root.dataset.state = '';
+  if (side === 'send') {
+    go('send', 'compose', { dir: -1 });
+    refreshCompose();
+  } else {
+    go('receive', 'enter', { dir: -1 }).then(() => {
+      if (matchMedia('(pointer: fine)').matches) focusPin();
+    });
+  }
+}
+
+function fallbackToServer(side) {
+  const d = state.direct;
+  state.direct = null;
+  if (d) cleanupDirect(d);
+  setMode(side, 'server');
+  if (side === 'send') {
+    go('send', 'compose', { dir: -1 });
+    refreshCompose();
+    toast('Server mode selected. Your message and files are still here.');
+  } else {
+    go('receive', 'enter', { dir: -1 }).then(() => {
+      if (matchMedia('(pointer: fine)').matches) focusPin();
+    });
+    toast('Server mode selected. A Direct code can only be opened in Direct mode.');
+  }
+}
+
 /* ───────────── send ───────────── */
 
 /** Sends one part with upload progress. Network and server hiccups are marked retryable. */
@@ -424,6 +1015,7 @@ async function uploadParts(code, sealed, reservation, partBytes, onProgress) {
 
 async function send() {
   if (state.sending || sendBtn.disabled) return;
+  if (state.mode.send === 'direct') return sendDirect();
   state.sending = true;
   refreshCompose();
   const text = note.value;
@@ -606,7 +1198,9 @@ function maybeSubmit() {
 
 function submitPin() {
   const code = pinValue();
-  if (code.length === 4 && !state.receiving) receive(code);
+  if (code.length !== 4 || state.receiving) return;
+  if (state.mode.receive === 'direct') receiveDirect(code);
+  else receive(code);
 }
 
 pinInputs.forEach((input, i) => {
@@ -724,7 +1318,7 @@ function downloadLink(file, className) {
   return h('a', { class: className, href: url, download: file.name, title: 'Download', 'aria-label': `Download ${file.name}` }, icon('download'));
 }
 
-function renderResult({ text, files }, { burn, expiresAt }) {
+function renderResult({ text, files }, { burn = false, expiresAt = 0, direct = false } = {}) {
   for (const url of state.resultUrls) URL.revokeObjectURL(url);
   state.resultUrls = [];
 
@@ -762,9 +1356,11 @@ function renderResult({ text, files }, { burn, expiresAt }) {
   if (!blocks.length) blocks.push(h('section', { class: 'block' }, h('p', { class: 'message' }, 'This drop is empty.')));
   blocks.forEach((block, i) => block.style.setProperty('--i', String(i)));
   $('#result-body').replaceChildren(...blocks);
-  $('#result-meta').textContent = burn
-    ? 'Burned on opening. It’s gone from the server.'
-    : `Still available for ${formatDuration(expiresAt - Date.now())}`;
+  $('#result-meta').textContent = direct
+    ? 'Sent directly from the other device. Nothing was stored on the server.'
+    : burn
+      ? 'Burned on opening. It’s gone from the server.'
+      : `Still available for ${formatDuration(expiresAt - Date.now())}`;
   return pendingImages;
 }
 
@@ -841,6 +1437,26 @@ card.addEventListener('click', (event) => {
       go('receive', 'enter', { dir: -1 }).then(() => {
         if (matchMedia('(pointer: fine)').matches) focusPin();
       });
+      break;
+    case 'direct-copy-code':
+      if (state.direct?.code) copy(state.direct.code, 'Code copied');
+      break;
+    case 'direct-copy-link':
+      if (state.direct?.code) copy(`${location.origin}/#d${state.direct.code}`, 'Direct link copied');
+      break;
+    case 'direct-qr':
+      if (state.direct?.code) showQr(state.direct.code, `${location.origin}/#d${state.direct.code}`);
+      break;
+    case 'direct-cancel':
+      cancelDirectFlow(state.direct?.side ?? (state.tab === 'receive' ? 'receive' : 'send'));
+      break;
+    case 'direct-fallback':
+      fallbackToServer(state.direct?.side ?? (state.tab === 'receive' ? 'receive' : 'send'));
+      break;
+    case 'direct-new':
+      state.direct = null;
+      go('send', 'compose', { dir: -1 });
+      refreshCompose();
       break;
   }
 });
@@ -1020,21 +1636,64 @@ if (new URLSearchParams(location.search).has('share')) {
   takeShared().catch(() => toast('Couldn’t pick up what was shared.', 'error'));
 }
 
+// Direct mode only exists on a backend that advertises it in /api/config. The
+// Cloudflare Worker flavour does not, so the choice stays hidden there, no
+// /api/direct request is made, and Server mode behaves exactly as before.
 api('/api/config')
-  .then((config) => {
+  .then(async (config) => {
     state.maxBytes = config.maxBytes;
     state.partBytes = config.partBytes || state.partBytes;
     for (const el of $$('[data-limit]')) el.textContent = formatBytes(config.maxBytes);
     refreshCompose();
+    const direct = await loadDirectConfig(config);
+    if (!direct) {
+      if (state.pendingDirectLink) {
+        state.pendingDirectLink = '';
+        toast('Direct mode is not available on this deployment.', 'error');
+      }
+      return;
+    }
+    state.directConfig = direct;
+    for (const row of modeRows) row.hidden = false;
+    if (!directSupported()) {
+      for (const button of modeButtons.filter((el) => el.dataset.mode === 'direct')) {
+        // Keep it focusable so a click or key press can explain why, rather
+        // than leaving a dead control with no message.
+        button.setAttribute('aria-disabled', 'true');
+        button.title = 'This browser cannot open a direct data channel.';
+      }
+    }
+    if (state.pendingDirectLink) {
+      const code = state.pendingDirectLink;
+      state.pendingDirectLink = '';
+      setTab('receive', { instant: true });
+      setMode('receive', 'direct');
+      setPin(code);
+      receiveDirect(code);
+    }
   })
-  .catch(() => {});
+  .catch(() => {
+    if (state.pendingDirectLink) {
+      state.pendingDirectLink = '';
+      toast('Direct mode is not available on this deployment.', 'error');
+    }
+  });
 
-// Links look like https://host/#1234. Clear the hash right away so a refresh
-// doesn't try to reopen a drop that burned on first read.
-const linked = location.hash.match(/^#(\d{4})$/);
+// Links look like https://host/#1234 (Server) or https://host/#d1234 (Direct).
+// Clear the hash right away so a refresh doesn't try to reopen a burned drop.
+const linked = location.hash.match(/^#([dD]?)(\d{4})$/);
 if (linked) {
   history.replaceState(null, '', location.pathname + location.search);
   setTab('receive', { instant: true });
-  setPin(linked[1]);
-  receive(linked[1]);
+  setPin(linked[2]);
+  if (linked[1]) {
+    if (state.directConfig) {
+      setMode('receive', 'direct');
+      receiveDirect(linked[2]);
+    } else {
+      state.pendingDirectLink = linked[2];
+    }
+  } else {
+    receive(linked[2]);
+  }
 }
