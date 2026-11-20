@@ -182,7 +182,8 @@ class Store:
                    expires_at INTEGER,
                    joined_at INTEGER,
                    last_seq INTEGER DEFAULT 0,
-                   closed_at INTEGER)"""
+                   closed_at INTEGER,
+                   local_only INTEGER DEFAULT 0)"""
         )
         self.db.execute(
             """CREATE TABLE IF NOT EXISTS direct_signals (
@@ -214,6 +215,8 @@ class Store:
         have = {row[1] for row in self.db.execute("PRAGMA table_info(direct_sessions)")}
         if "closed_at" not in have:
             self.db.execute("ALTER TABLE direct_sessions ADD COLUMN closed_at INTEGER")
+        if "local_only" not in have:
+            self.db.execute("ALTER TABLE direct_sessions ADD COLUMN local_only INTEGER DEFAULT 0")
 
     # ── tiers ──
     def tier_dir(self, tier: str) -> Path:
@@ -541,7 +544,7 @@ class Store:
         with self.lock:
             return self.db.execute(
                 "SELECT pepper, sender_hash, receiver_hash, ttl, created_at, expires_at,"
-                " joined_at, last_seq, closed_at FROM direct_sessions WHERE code=?", (code,)
+                " joined_at, last_seq, closed_at, local_only FROM direct_sessions WHERE code=?", (code,)
             ).fetchone()
 
     def _direct_forget(self, code: str) -> None:
@@ -553,7 +556,7 @@ class Store:
             return False
         return True
 
-    def direct_create(self, ttl: int) -> dict:
+    def direct_create(self, ttl: int, local_only: bool = False) -> dict:
         """Mint a code, a pepper and a sender capability for a Direct session."""
         now = int(time.time() * 1000)
         with self.lock:
@@ -573,13 +576,14 @@ class Store:
                 self._direct_forget(code)  # a stale session may share the code
                 self.db.execute(
                     "INSERT INTO direct_sessions (code, pepper, sender_hash, receiver_hash,"
-                    " ttl, created_at, expires_at, joined_at, last_seq, closed_at)"
-                    " VALUES (?,?,?,NULL,?,?,?,NULL,0,NULL)",
-                    (code, pepper, sha256_text(sender), ttl, now, expires_at),
+                    " ttl, created_at, expires_at, joined_at, last_seq, closed_at, local_only)"
+                    " VALUES (?,?,?,NULL,?,?,?,NULL,0,NULL,?)",
+                    (code, pepper, sha256_text(sender), ttl, now, expires_at,
+                     1 if local_only else 0),
                 )
                 self.db.commit()
                 return {"code": code, "pepper": pepper, "sessionToken": sender,
-                        "ttl": ttl, "expiresAt": expires_at}
+                        "ttl": ttl, "expiresAt": expires_at, "localOnly": bool(local_only)}
         raise ApiError(503, "No free codes right now.")
 
     def direct_join(self, code: str) -> dict | None:
@@ -592,7 +596,7 @@ class Store:
                     self._direct_forget(code)
                     self.db.commit()
                 return None
-            pepper, _, receiver_hash, ttl, _, expires_at, _, _, closed_at = row
+            pepper, _, receiver_hash, ttl, _, expires_at, _, _, closed_at, local_only = row
             if closed_at is not None:
                 return None
             if receiver_hash:
@@ -611,7 +615,7 @@ class Store:
             self.db.execute("UPDATE direct_sessions SET last_seq=? WHERE code=?", (seq, code))
             self.db.commit()
             return {"pepper": pepper, "ttl": ttl, "expiresAt": expires_at,
-                    "sessionToken": receiver, "seq": seq}
+                    "sessionToken": receiver, "seq": seq, "localOnly": bool(local_only)}
 
     def direct_role(self, code: str, token_value: str):
         row = self._direct_row(code)
@@ -1087,7 +1091,7 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json()
             ttl = payload.get("ttl")
             ttl = int(ttl) if isinstance(ttl, int) and ttl in TTLS else 3600
-            return self.json(201, store.direct_create(ttl))
+            return self.json(201, store.direct_create(ttl, payload.get("localOnly") is True))
 
         match = re.fullmatch(r"/api/direct/sessions/(\d{4})/join", path)
         if match and method == "POST":

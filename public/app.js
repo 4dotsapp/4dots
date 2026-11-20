@@ -29,6 +29,8 @@ const fileList = $('#files');
 const sendBtn = $('#send-btn');
 const composeHint = $('#compose-hint');
 const burnToggle = $('#burn');
+const localOnlyToggle = $('#local-only');
+const localOnlyOption = $('#local-only-option');
 const ttlChips = $$('[data-ttl]');
 const reels = $$('.reel');
 const pin = $('#pin');
@@ -40,6 +42,7 @@ const state = {
   tab: 'send',
   view: { send: 'compose', receive: 'enter' },
   mode: { send: 'server', receive: 'server' },
+  localOnly: false,
   files: [], // { id, file, url }
   ttl: 3600,
   maxBytes: 1024 * 1024 * 1024,
@@ -256,9 +259,13 @@ function refreshCompose() {
   if (tooBig) {
     composeHint.textContent = `That’s ${formatBytes(bytes)}. The limit is ${formatBytes(state.maxBytes)}.`;
   } else if (state.mode.send === 'direct') {
-    composeHint.textContent = state.files.length
-      ? `${plural(state.files.length, 'file')} · ${formatBytes(bytes)} · sent device to device`
-      : 'Nothing is stored. Both devices must stay online for the whole transfer.';
+    if (state.localOnly) {
+      composeHint.textContent = 'Local network only · if the LAN path is blocked, the transfer fails instead of using the internet.';
+    } else {
+      composeHint.textContent = state.files.length
+        ? `${plural(state.files.length, 'file')} · ${formatBytes(bytes)} · sent device to device`
+        : 'Nothing is stored. Both devices must stay online for the whole transfer.';
+    }
   } else if (state.files.length) {
     composeHint.textContent = `${plural(state.files.length, 'file')} · ${formatBytes(bytes)} · encrypted before upload`;
   } else {
@@ -330,6 +337,11 @@ dropzone.addEventListener('keydown', (event) => {
 fileInput.addEventListener('change', () => {
   addFiles(fileInput.files);
   fileInput.value = '';
+});
+
+localOnlyToggle.addEventListener('change', () => {
+  state.localOnly = localOnlyToggle.checked;
+  refreshCompose();
 });
 
 const ttlSlider = liquidSlider($('.chips'), $('.chips-thumb'), ttlChips, (i) => selectTtl(ttlChips[i]),
@@ -450,6 +462,7 @@ function setMode(side, mode) {
     compose.classList.toggle('is-direct', mode === 'direct');
     sendBtn.querySelector('span').textContent = mode === 'direct' ? 'Go direct' : 'Encrypt & get code';
     burnToggle.closest('.option').hidden = mode === 'direct';
+    localOnlyOption.hidden = mode !== 'direct';
     refreshCompose();
   } else {
     views['receive-enter'].classList.toggle('is-direct', mode === 'direct');
@@ -479,7 +492,7 @@ function newDirect(side, code = '') {
   meter.reset();
   if (directEls[side].hint) directEls[side].hint.hidden = true;
   return {
-    side, code, token: '', pepper: '', expiresAt: 0, ttl: state.ttl,
+    side, code, token: '', pepper: '', expiresAt: 0, ttl: state.ttl, localOnly: false,
     total: 0, sentBytes: 0, receivedBytes: 0,
     pc: null, dc: null, rx: null, sealed: null,
     poller: null, stopWatch: null, abort: new AbortController(),
@@ -604,7 +617,7 @@ function attachPeer(d) {
       clearTimeout(d.pollGrace);
       d.pollGrace = setTimeout(() => d.poller?.stop(), 750);
     } else if (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed') {
-      failDirect(d, 'The two devices could not find a path to each other. Nothing was relayed.');
+      failDirect(d, pathFailure(d));
     } else if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
       setDirectStatus(d.side, d.phase === 'transferring' ? 'Reconnecting…' : 'Connecting',
         'The direct connection dropped. Waiting for it to recover.');
@@ -659,12 +672,20 @@ async function flushCandidates(d) {
  * ICE can sit in "connecting" for a long time when no path exists. After a
  * bounded wait we say so, rather than leaving the user staring at a spinner.
  */
+function pathFailure(d) {
+  return d.localOnly
+    ? 'No local network path found. Turn off VPN/AP isolation/mDNS filtering, or disable Local network only.'
+    : 'The two devices could not find a path to each other. Nothing was relayed.';
+}
+
 function armConnectWatchdog(d, seconds = 20) {
   clearTimeout(d.connectTimer);
   d.connectTimer = setTimeout(() => {
     if (state.direct !== d || d.failed || d.finished) return;
     if (isPeerConnected(d.pc)) return;
-    failDirect(d, 'The two devices could not reach each other in time. No relay was used, so use Server mode instead.');
+    failDirect(d, d.localOnly
+      ? 'No local network path found in time. Turn off VPN/AP isolation/mDNS filtering, or disable Local network only.'
+      : 'The two devices could not reach each other in time. No relay was used, so use Server mode instead.');
   }, seconds * 1000);
 }
 
@@ -766,15 +787,17 @@ async function sendDirect() {
   go('send', 'direct');
 
   try {
-    const session = await createSession(ttl);
+    const session = await createSession(ttl, state.localOnly);
     if (state.direct !== d) return;
+    d.localOnly = session.localOnly === true;
     d.code = session.code;
     d.token = session.sessionToken;
     d.pepper = session.pepper;
     d.expiresAt = session.expiresAt;
     renderDirectCode(d.code);
-    d.phase = 'waiting';
-    startDirectClock(d);
+    // Do not start the expiry clock yet: its tick would overwrite the
+    // encryption progress line once a second.
+    d.phase = 'encrypting';
     setDirectStatus('send', 'Encrypting on your device', 'AES-256-GCM, keyed by your code');
     d.sealed = await seal(d.code, d.pepper, bundle(text, files), (p) => {
       setDirectStatus('send', 'Encrypting on your device', `${Math.round(p * 100)}% · AES-256-GCM, keyed by your code`);
@@ -783,9 +806,11 @@ async function sendDirect() {
     d.total = d.sealed.size;
     d.meter.setCompact(d.total <= 512 * 1024);
     d.meter.setBytes(0, d.total);
+    d.phase = 'waiting';
+    startDirectClock(d);
     setDirectStatus('send', 'Waiting for the recipient', `Keep this tab open. Both devices must stay online · ends in ${formatDuration(d.expiresAt - Date.now())}`);
 
-    const pc = makePeer(state.directConfig.stunUrls);
+    const pc = makePeer(d.localOnly ? [] : state.directConfig.stunUrls);
     d.pc = pc;
     attachPeer(d);
     const dc = pc.createDataChannel('drop', { ordered: true });
@@ -919,8 +944,9 @@ async function receiveDirect(code) {
     d.token = session.sessionToken;
     d.pepper = session.pepper;
     d.expiresAt = session.expiresAt;
+    d.localOnly = session.localOnly === true;
     startDirectClock(d);
-    const pc = makePeer(state.directConfig.stunUrls);
+    const pc = makePeer(d.localOnly ? [] : state.directConfig.stunUrls);
     d.pc = pc;
     pc.ondatachannel = (event) => {
       if (state.direct !== d) return;

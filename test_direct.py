@@ -43,8 +43,8 @@ def call(path, data=None, method=None, headers=None):
         return err.code, err.read(), dict(err.headers)
 
 
-def session(ttl=600, ip="10.0.0.1"):
-    st, body, _ = call("/api/direct/sessions", {"ttl": ttl}, "POST",
+def session(ttl=600, ip="10.0.0.1", local_only=False):
+    st, body, _ = call("/api/direct/sessions", {"ttl": ttl, "localOnly": local_only}, "POST",
                        {"content-type": "application/json", "x-forwarded-for": ip})
     assert st == 201, (st, body)
     return json.loads(body)
@@ -122,6 +122,13 @@ try:
     receiver = joined["sessionToken"]
     st, _, _ = join(code, ip="10.0.0.3")
     check("a second recipient is refused", st == 409, st)
+
+    info = session(ip="10.0.5.1", local_only=True)
+    st, body, _ = join(info["code"], ip="10.0.5.2")
+    check("Local network only is carried to the recipient",
+          info["localOnly"] is True and json.loads(body).get("localOnly") is True)
+    call(f"/api/direct/sessions/{info['code']}", None, "DELETE",
+         {"x-session-token": info["sessionToken"], "x-forwarded-for": "10.0.5.1"})
 
     print("\n=== signalling ===")
     marker = "SECRET-SDP-MARKER"

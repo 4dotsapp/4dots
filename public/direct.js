@@ -105,8 +105,8 @@ async function request(path, { method = 'GET', body, token, signal } = {}) {
   return data;
 }
 
-export function createSession(ttl) {
-  return request('/api/direct/sessions', { method: 'POST', body: { ttl } });
+export function createSession(ttl, localOnly = false) {
+  return request('/api/direct/sessions', { method: 'POST', body: { ttl, localOnly } });
 }
 
 export function joinSession(code) {
