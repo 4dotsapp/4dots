@@ -76,7 +76,7 @@
       <h2>Who processes data for us</h2>
       <ul>
         <li><strong>Cloudflare</strong> hosts the site and the server, protects them from attacks, and forwards emails sent to 4dots.app addresses. See <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare’s privacy policy</a>.</li>
-        <li><strong><a href="https://nimbo.fun">nimbo.fun</a></strong> stores encrypted drops until they’re deleted. It receives only encrypted data under random names.</li>
+        <li><strong>Storage where the instance runs.</strong> The instance you are using stores the ciphertext itself: the RAM tier for 10-minute and 1-hour drops and the SSD tier for 24-hour drops, on the machine that runs the instance. That is the only place the ciphertext exists. If you run the Cloudflare Worker flavour yourself, that flavour stores the ciphertext on <a href="https://nimbo.fun">nimbo.fun</a> under random names; nimbo receives only encrypted data, and the blob is deleted when the drop expires.</li>
       </ul>
       <p>Their servers may be outside your country, including outside the EU.</p>
 
