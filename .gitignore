@@ -27,3 +27,4 @@ credentials.json
 *.pem
 *.key
 cloudflared/
+*PROMPT*.md

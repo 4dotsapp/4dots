@@ -15,6 +15,7 @@ services:
       FOURDOTS_RAM_MAX_MB: "0"          # 0 = 40% of total RAM
       FOURDOTS_SWEEP_SECONDS: "15"      # how often the tier policy is enforced
       FOURDOTS_ORPHAN_GRACE_SECONDS: "21600" # ignore unreferenced files this long (in-flight uploads)
+      FOURDOTS_STUN_URLS: "${FOURDOTS_STUN_URLS:-stun:stun.cloudflare.com:3478,stun:stun.l.google.com:19302}" # Direct mode: STUN only, never TURN
     volumes:
       # The SSD tier and the app's home directory. Point this at a host
       # directory; ./data is fine for a fresh install.

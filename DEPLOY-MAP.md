@@ -86,6 +86,30 @@ RAM is volatile: a reboot, power cut, `docker restart 4dots` or a re-create
 destroys every RAM-tier drop. Those codes stop working. 24-hour drops survive.
 The terms, privacy page and status page tell users this.
 
+## Direct mode
+
+The backend also brokers Direct sessions: two browsers connect over a WebRTC
+data channel and the file never reaches the server. This does not change the
+storage tiers.
+
+- Signalling endpoints live under `/api/direct/*` on the same `4dots` container
+  and port. They exchange SDP and ICE candidates over long polls of about one
+  second; there is no WebSocket server.
+- Metadata lives in the same `state.db`, in `direct_sessions` and
+  `direct_signals`. The sweeper deletes expired sessions, sessions nobody joined
+  after 15 minutes, and orphan signals.
+- No Direct session writes to `/ram` or `/data/drops`. Only Server mode uses the
+  tiers.
+- The server sees both peers' IP addresses in the ICE candidates while a
+  session is open. Codes are redacted in logs (`/api/direct/sessions/****`);
+  peppers, SDP bodies and file names are never logged.
+- STUN is the only ICE server. TURN is refused by both the backend and the
+  frontend, so a failed direct path is reported, never silently relayed.
+- Both peers must stay online. A Direct session is metadata in `state.db`, so a
+  restart does not delete it, and the DataChannel itself does not depend on the
+  server; a long poll interrupted by the restart retries on its own. There is no
+  stored copy to lose because there is no stored copy.
+
 ## Environment variables
 
 | Variable | Default | Meaning |
@@ -104,6 +128,7 @@ The terms, privacy page and status page tell users this.
 | `FOURDOTS_RAM_MIN_FREE_MB` | `64` | Absolute free-memory guard used when picking the RAM mount. |
 | `FOURDOTS_SWEEP_SECONDS` | `15` | Tier/expiry sweep interval. |
 | `FOURDOTS_ORPHAN_GRACE_SECONDS` | `21600` | Unreferenced files younger than this are assumed to be uploads in flight and are not deleted. |
+| `FOURDOTS_STUN_URLS` | `stun:stun.cloudflare.com:3478,stun:stun.l.google.com:19302` | Direct mode: comma-separated STUN URLs. `turn:` entries are ignored; there is no relay. |
 
 Compose also reads two values from `.env` (never committed):
 

@@ -268,12 +268,40 @@ memory pressure, byte-identical downloads, and recovery).
 | `FOURDOTS_RAM_MAX_MB` | `0` (40% of RAM) | Cap on the RAM tier. |
 | `FOURDOTS_SWEEP_SECONDS` | `15` | How often the tier policy and the expiry sweep run. |
 | `FOURDOTS_ORPHAN_GRACE_SECONDS` | `21600` | Do not delete unreferenced blob files younger than this. An upload in progress is not in the metadata yet, so it looks like an orphan. |
+| `FOURDOTS_STUN_URLS` | `stun:stun.cloudflare.com:3478,stun:stun.l.google.com:19302` | Direct mode: comma-separated STUN URLs. `turn:`/`turns:` entries are ignored; there is no relay. |
 | `FOURDOTS_DATA_DIR` | `./data` | Host directory mounted at `/data` (SSD tier and `state.db`). Read by Compose from `.env`. |
 | `FOURDOTS_NETWORK` | `4dots_default` | External Docker network shared with the tunnel. Read by Compose from `.env`. |
 
 If you also want to cut the encryption time itself, the next step would be
 encrypting chunks in parallel Web Workers instead of one at a time; that is a
 frontend change, not a server one.
+
+### Direct mode
+
+The self-hosted backend also offers a Direct mode. It is on whenever the
+frontend can reach `/api/direct/config`; the upstream Cloudflare Worker does not
+implement that endpoint, so its copy of the same frontend stays Server-only and
+hides the choice.
+
+- **Signalling only.** `POST /api/direct/sessions` mints a code and a pepper;
+  `POST .../join`, `POST .../signal` and the ~1 s `GET .../signal` long poll
+  exchange SDP and ICE candidates; `DELETE ...` cancels. Sessions live in two
+  SQLite tables, `direct_sessions` and `direct_signals`, and the sweeper removes
+  expired ones. No file bytes ever reach the server, and nothing is written to
+  the RAM or SSD tiers.
+- **Requirements.** A secure context (HTTPS, or `localhost`) and a reachable
+  STUN server. Both peers must stay online for the whole transfer; there is no
+  stored copy and no 24-hour recovery.
+- **No TURN.** Setting a `turn:` URL in `FOURDOTS_STUN_URLS` has no effect: the
+  server drops non-STUN entries and the browser is never given a relay. If the
+  two networks cannot meet directly, the transfer fails and the UI offers Server
+  mode; if a relay pair ever appeared, the UI reports it as not direct instead
+  of pretending.
+- **What the server sees.** Both peers' IP addresses in the ICE candidates, the
+  session code, timestamps and token hashes. It does not log the code (it is
+  redacted as `****`), the pepper, SDP bodies or file names. A public STUN
+  server also sees each client's IP; point `FOURDOTS_STUN_URLS` at your own if
+  you prefer.
 
 ## 6. Checking the numbers on your own box
 

@@ -30,6 +30,8 @@
 
 4dots is a small file-sharing service you open in a browser: write a note, add photos or files, and get a four-digit code like `4821`. Whoever has the code opens 4dots.app, types it, and gets the drop — no account, no app, no link to forward. Everything is encrypted in your browser before it is uploaded, so the service only ever stores ciphertext. Drops expire after 10 minutes, an hour or a day, and can be set to burn after the first open.
 
+There are two modes. **Server** is the default: the encrypted drop waits on the server until the recipient opens it, so the sender can go offline. **Direct** (self-hosted backend only) connects the two browsers straight to each other over a WebRTC data channel; the file is never stored, and both devices must stay online.
+
 **4dots.app is free, has no sign-up, and is open to everyone.** This repository is its source: the frontend, the encryption, the server and the tests. You can read it, audit it, improve it — and, if you want, run your own copy.
 
 ## Why people use it
@@ -38,6 +40,7 @@
 - **Sealed on your device.** AES-256-GCM before anything leaves the browser; the server only sees ciphertext.
 - **Gone when it's done.** 10 minutes, 1 hour or 24 hours; burn after reading; delete early.
 - **Notes, photos and files up to 1 GB.** Pictures open in the drop with a preview.
+- **Server or Direct.** Leave it on the server, or send device to device with nothing stored.
 - **Open source.** The whole stack is here under the MIT licence.
 
 ## See it
@@ -90,6 +93,8 @@ flowchart LR
 3. **The ciphertext is stored.** On 4dots.app it goes to the instance’s RAM or SSD tier; in your own copy it goes to yours.
 4. **They open it.** Their browser downloads the ciphertext and decrypts it as it arrives. Burn-after-reading drops are deleted once delivered.
 
+**Direct mode** keeps the same key and encryption but removes the storage step. The server mints the code and pepper, then carries only SDP and ICE candidates over a short-lived long poll. The two browsers open a WebRTC data channel, the sender slices the sealed blob into 64 KiB messages, and the recipient decrypts the stream as it arrives. There is no TURN relay: the connection is local, direct over the internet, or it fails and offers Server mode. Both devices must stay online.
+
 ## Quick start
 
 ### Use it
@@ -108,12 +113,12 @@ docker compose up -d --build
 
 Compose joins an external network for your tunnel or proxy. If you do not have one yet, create it first (`docker network create 4dots_default`) or set `FOURDOTS_NETWORK` to an existing network.
 
-24-hour drops land in `drops/` on the host disk (inside the `FOURDOTS_DATA_DIR` volume); the 10-minute and 1-hour tiers live in a tmpfs at `/ram` and disappear on restart. The full guide is in [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md); operators can start with [DEPLOY-MAP.md](DEPLOY-MAP.md).
+24-hour drops land in `drops/` on the host disk (inside the `FOURDOTS_DATA_DIR` volume); the 10-minute and 1-hour tiers live in a tmpfs at `/ram` and disappear on restart. Direct mode is on by default and needs outbound UDP to a STUN server; set `FOURDOTS_STUN_URLS` to use your own. The full guide is in [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md); operators can start with [DEPLOY-MAP.md](DEPLOY-MAP.md).
 
 <details>
 <summary><b>Prefer the upstream Cloudflare Worker?</b></summary>
 
-The hosted 4dots.app runs this Worker. It is still a valid way to run 4dots; the self-hosted backend is just another option. You need **Node 20+**.
+This is the optional upstream Worker flavour. It is still a valid way to run 4dots, but 4dots.app itself now runs the self-hosted `server.py` backend. The Worker implements the Server API only: the shared frontend hides Direct mode there because `/api/direct/*` does not exist. You need **Node 20+**.
 
 ```sh
 git clone https://github.com/4dotsapp/4dots.git
@@ -142,6 +147,7 @@ Then add your domain under the Worker's **Settings → Domains & Routes**, or se
 |---|---|---|
 | **Setup** | None — open the site. | Docker on a machine you control. |
 | **Storage** | Encrypted blobs on the instance’s RAM and SSD tiers. | Your own RAM and disk. |
+| **Modes** | Server and Direct (device to device). | Server and Direct on `server.py`; Server only on the Worker flavour. |
 | **Limits** | 1 GB per drop; 10 min / 1 h / 24 h. | The same limits, bounded by your disk and memory. |
 | **Who runs it** | The 4dots team. | You. |
 | **Best for** | Sending something now. | Your own instance, disk and uptime. |
@@ -155,6 +161,17 @@ The self-hosted backend keeps short-lived drops in memory and long-lived ones on
 - **Below 2 GB free memory**, every drop held in RAM is moved to disk, and new short-lived drops are written to disk. Codes, names, sizes and bytes do not change.
 - **Memory is volatile.** A restart, reboot or power cut loses the short drops; use the 24-hour option for anything that must survive.
 
+## Direct mode (self-hosted)
+
+Direct sends from browser to browser and writes nothing to the RAM or SSD tiers. It needs:
+
+- **A secure context.** WebRTC data channels require HTTPS (or `localhost`).
+- **STUN reachability.** Set `FOURDOTS_STUN_URLS` to one or more comma-separated `stun:` URLs. The defaults are public STUN servers. STUN is used for discovery only; TURN is filtered out and never used, so the content is never relayed.
+- **Both peers online.** There is no stored copy and no 24-hour recovery. If either page closes or the connection drops, the transfer stops.
+- **Signalling only.** The server keeps a code, a pepper, token hashes and the SDP/ICE messages until the session ends. Those messages contain both peers' IP addresses, so the server sees the addresses while a Direct session is open.
+
+The speedometer shows measured throughput (a 500 ms sample smoothed with an exponential moving average) and the time left derived from it. It shows `--` until it has real samples.
+
 ## Security
 
 > [!IMPORTANT]
@@ -162,6 +179,8 @@ The self-hosted backend keeps short-lived drops in memory and long-lived ones on
 
 - **Client-side encryption.** The note and files are sealed in the browser with AES-256-GCM, using a key derived from the code (PBKDF2-SHA256, 600,000 rounds) plus a per-code secret from the server (the pepper).
 - **Storage only sees ciphertext.** On 4dots.app, the instance’s RAM and SSD tiers hold encrypted blobs under random names; in your own copy, your disk does. Neither learns the code or the pepper.
+- **Direct mode only carries signalling.** The server sees the two IP addresses in the ICE candidates and the session metadata, never the file, its name or the key. A public STUN server also sees each client’s IP.
+- **No relay.** TURN URLs are ignored by the backend and the frontend. If a direct path is impossible the transfer fails, and the UI says so instead of pretending.
 - **Guessing is slowed down.** Drops expire, can burn after one open, and each IP gets 12 wrong codes per 10 minutes.
 - **Tampering fails loudly.** Every chunk is authenticated and numbered, so a reordered, cut-short or altered drop will not decrypt.
 - **The ceiling is honest.** Whoever runs the server holds the secret that makes the keys, and with 10,000 codes they could work them out. No four-digit design can avoid that. On 4dots.app that secret belongs to the service; if you run your own copy, it belongs to you.
