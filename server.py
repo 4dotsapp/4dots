@@ -56,7 +56,17 @@ SECURITY_HEADERS = {
 LIMITS = {  # kind -> (max, window seconds)
     "create": (30, 600),
     "miss": (12, 600),
+    "signal": (600, 600),
 }
+# Direct mode: the server only carries SDP and ICE candidates between two peers.
+# It never receives file bytes, so a Direct session is metadata only.
+DIRECT_KINDS = ("offer", "answer", "candidate", "bye")
+DIRECT_MAX_BODY = 64 * 1024          # one signalling message, SDP included
+DIRECT_MAX_EVENTS = 512              # per session, so a peer cannot grow the row forever
+DIRECT_POLL_SECONDS = 1.0            # a long poll holds its thread at most this long
+DIRECT_POLL_STEP = 0.1
+DIRECT_SWEEP_GRACE_SECONDS = 15 * 60  # an unjoined session this old is dropped
+DEFAULT_STUN_URLS = "stun:stun.cloudflare.com:3478,stun:stun.l.google.com:19302"
 # A part file is written under its final name and only recorded in the database
 # once the upload finishes, so an in-flight upload looks like an orphan to the
 # sweeper. Never delete an unreferenced file until it has been idle this long.
@@ -159,6 +169,34 @@ class Store:
                    opened INTEGER DEFAULT 0,
                    committed INTEGER DEFAULT 0)"""
         )
+        # Direct mode. A session is a code, a pepper and a pair of capability
+        # hashes; the signals table holds only SDP and ICE candidates.
+        self.db.execute(
+            """CREATE TABLE IF NOT EXISTS direct_sessions (
+                   code TEXT PRIMARY KEY,
+                   pepper TEXT,
+                   sender_hash TEXT,
+                   receiver_hash TEXT,
+                   ttl INTEGER,
+                   created_at INTEGER,
+                   expires_at INTEGER,
+                   joined_at INTEGER,
+                   last_seq INTEGER DEFAULT 0,
+                   closed_at INTEGER)"""
+        )
+        self.db.execute(
+            """CREATE TABLE IF NOT EXISTS direct_signals (
+                   code TEXT,
+                   seq INTEGER,
+                   role TEXT,
+                   kind TEXT,
+                   data TEXT,
+                   created_at INTEGER,
+                   PRIMARY KEY (code, seq))"""
+        )
+        self.db.execute(
+            "CREATE INDEX IF NOT EXISTS direct_signals_code ON direct_signals(code, seq)"
+        )
         self._migrate_schema()
         self.db.commit()
         self.rate = {}
@@ -173,6 +211,9 @@ class Store:
         for column, ddl in (("tier", "TEXT DEFAULT 'ssd'"),):
             if column not in have:
                 self.db.execute(f"ALTER TABLE drops ADD COLUMN {column} {ddl}")
+        have = {row[1] for row in self.db.execute("PRAGMA table_info(direct_sessions)")}
+        if "closed_at" not in have:
+            self.db.execute("ALTER TABLE direct_sessions ADD COLUMN closed_at INTEGER")
 
     # ── tiers ──
     def tier_dir(self, tier: str) -> Path:
@@ -465,7 +506,8 @@ class Store:
                 if self.migrate_to_ssd(code):
                     moved += 1
         self.clean_orphans()
-        return {"migrated": moved}
+        expired_direct = self.sweep_direct()
+        return {"migrated": moved, "directExpired": expired_direct}
 
     def clean_orphans(self) -> None:
         """Remove blob files no drop refers to any more."""
@@ -491,6 +533,208 @@ class Store:
                     entry.unlink(missing_ok=True)
             except OSError:
                 pass
+
+    # ── direct sessions (metadata only) ──
+    def _direct_row(self, code: str):
+        # The connection is shared by handler threads; every read/write goes
+        # through the same RLock as the rest of the store.
+        with self.lock:
+            return self.db.execute(
+                "SELECT pepper, sender_hash, receiver_hash, ttl, created_at, expires_at,"
+                " joined_at, last_seq, closed_at FROM direct_sessions WHERE code=?", (code,)
+            ).fetchone()
+
+    def _direct_forget(self, code: str) -> None:
+        self.db.execute("DELETE FROM direct_signals WHERE code=?", (code,))
+        self.db.execute("DELETE FROM direct_sessions WHERE code=?", (code,))
+
+    def _direct_live(self, code: str, row) -> bool:
+        if not row or not row[5] or row[5] < int(time.time() * 1000):
+            return False
+        return True
+
+    def direct_create(self, ttl: int) -> dict:
+        """Mint a code, a pepper and a sender capability for a Direct session."""
+        now = int(time.time() * 1000)
+        with self.lock:
+            for _ in range(200):
+                code = f"{secrets.randbelow(10000):04d}"
+                # One code must mean one thing: never shadow a live drop or a
+                # reservation that is still uploading.
+                drop = self.db.execute(
+                    "SELECT expires_at, committed FROM drops WHERE code=?", (code,)
+                ).fetchone()
+                drop_live = bool(drop) and (drop[0] is None or drop[0] > now)
+                direct = self._direct_row(code)
+                if drop_live or self._direct_live(code, direct):
+                    continue
+                pepper, sender = token(), token()
+                expires_at = now + ttl * 1000
+                self._direct_forget(code)  # a stale session may share the code
+                self.db.execute(
+                    "INSERT INTO direct_sessions (code, pepper, sender_hash, receiver_hash,"
+                    " ttl, created_at, expires_at, joined_at, last_seq, closed_at)"
+                    " VALUES (?,?,?,NULL,?,?,?,NULL,0,NULL)",
+                    (code, pepper, sha256_text(sender), ttl, now, expires_at),
+                )
+                self.db.commit()
+                return {"code": code, "pepper": pepper, "sessionToken": sender,
+                        "ttl": ttl, "expiresAt": expires_at}
+        raise ApiError(503, "No free codes right now.")
+
+    def direct_join(self, code: str) -> dict | None:
+        """Hand the pepper and a receiver capability to someone with the code."""
+        now = int(time.time() * 1000)
+        with self.lock:
+            row = self._direct_row(code)
+            if not self._direct_live(code, row):
+                if row:
+                    self._direct_forget(code)
+                    self.db.commit()
+                return None
+            pepper, _, receiver_hash, ttl, _, expires_at, _, _, closed_at = row
+            if closed_at is not None:
+                return None
+            if receiver_hash:
+                raise ApiError(409, "Someone has already joined this Direct session.")
+            receiver = token()
+            self.db.execute(
+                "UPDATE direct_sessions SET receiver_hash=?, joined_at=? WHERE code=?",
+                (sha256_text(receiver), now, code),
+            )
+            seq = (row[7] or 0) + 1
+            self.db.execute(
+                "INSERT INTO direct_signals (code, seq, role, kind, data, created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (code, seq, "receiver", "join", "{}", now),
+            )
+            self.db.execute("UPDATE direct_sessions SET last_seq=? WHERE code=?", (seq, code))
+            self.db.commit()
+            return {"pepper": pepper, "ttl": ttl, "expiresAt": expires_at,
+                    "sessionToken": receiver, "seq": seq}
+
+    def direct_role(self, code: str, token_value: str):
+        row = self._direct_row(code)
+        if not self._direct_live(code, row):
+            return None
+        if row[1] and hmac.compare_digest(row[1], sha256_text(token_value)):
+            return "sender"
+        if row[2] and hmac.compare_digest(row[2], sha256_text(token_value)):
+            return "receiver"
+        return None
+
+    def direct_post(self, code: str, token_value: str, kind: str, data) -> int:
+        now = int(time.time() * 1000)
+        if kind not in DIRECT_KINDS:
+            raise ApiError(400, "Unknown signalling message.")
+        payload = json.dumps(data if data is not None else {}, separators=(",", ":"))
+        if len(payload.encode()) > DIRECT_MAX_BODY:
+            raise ApiError(413, "That signalling message is too large.")
+        with self.lock:
+            row = self._direct_row(code)
+            if not self._direct_live(code, row) or row[8] is not None:
+                raise ApiError(404, "That Direct session has expired.")
+            if row[1] and hmac.compare_digest(row[1], sha256_text(token_value)):
+                role = "sender"
+            elif row[2] and hmac.compare_digest(row[2], sha256_text(token_value)):
+                role = "receiver"
+            else:
+                raise ApiError(403, "That Direct session token is not valid.")
+            # Only the sender may offer, only the receiver may answer.
+            if kind == "offer" and role != "sender":
+                raise ApiError(403, "Only the sender can post an offer.")
+            if kind == "answer" and role != "receiver":
+                raise ApiError(403, "Only the recipient can post an answer.")
+            count = self.db.execute(
+                "SELECT COUNT(*) FROM direct_signals WHERE code=?", (code,)
+            ).fetchone()[0]
+            if count >= DIRECT_MAX_EVENTS:
+                raise ApiError(429, "This Direct session has too many signalling messages.")
+            seq = (row[7] or 0) + 1
+            self.db.execute(
+                "INSERT INTO direct_signals (code, seq, role, kind, data, created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (code, seq, role, kind, payload, now),
+            )
+            self.db.execute("UPDATE direct_sessions SET last_seq=? WHERE code=?", (seq, code))
+            self.db.commit()
+            return seq
+
+    def direct_events(self, code: str, token_value: str, since: int) -> tuple[int, list]:
+        """Long-poll for signals. Returns at most 256 events, or ([], last_seq)."""
+        role = self.direct_role(code, token_value)
+        if not role:
+            row = self._direct_row(code)
+            if not self._direct_live(code, row):
+                raise ApiError(404, "That Direct session has expired.")
+            raise ApiError(403, "That Direct session token is not valid.")
+        deadline = time.monotonic() + DIRECT_POLL_SECONDS
+        while True:
+            with self.lock:
+                row = self._direct_row(code)
+                if not self._direct_live(code, row):
+                    raise ApiError(404, "That Direct session has expired.")
+                rows = self.db.execute(
+                    "SELECT seq, role, kind, data FROM direct_signals"
+                    " WHERE code=? AND seq>? ORDER BY seq LIMIT 256",
+                    (code, max(0, since)),
+                ).fetchall()
+                last = row[7] or 0
+            if rows:
+                events = [{"seq": seq, "role": r, "kind": k, "data": json.loads(d)}
+                          for seq, r, k, d in rows]
+                return last, events
+            if time.monotonic() >= deadline:
+                return last, []
+            time.sleep(DIRECT_POLL_STEP)
+
+    def direct_delete(self, code: str, token_value: str) -> bool:
+        # Both peers clean up. Deleting an already-gone session is a no-op, not
+        # an error, so the loser of that race does not leave a failed request.
+        if not self._direct_row(code):
+            return True
+        role = self.direct_role(code, token_value)
+        if not role:
+            return False
+        with self.lock:
+            # Keep a short tombstone instead of deleting the row outright: the
+            # other peer may have a long poll in flight, and a 204 is a clean
+            # "nothing more" where a 404 would show up as a failed request in
+            # the browser console. The sweeper removes it seconds later.
+            now = int(time.time() * 1000)
+            self.db.execute("DELETE FROM direct_signals WHERE code=?", (code,))
+            self.db.execute("UPDATE direct_sessions SET expires_at=?, closed_at=? WHERE code=?",
+                            (now + 5000, now, code))
+            self.db.commit()
+        return True
+
+    def sweep_direct(self) -> int:
+        now = int(time.time() * 1000)
+        with self.lock:
+            stale = [row[0] for row in self.db.execute(
+                "SELECT code FROM direct_sessions WHERE expires_at<?", (now,)
+            ).fetchall()]
+            # A session nobody joined has no value after a while either.
+            stale += [row[0] for row in self.db.execute(
+                "SELECT code FROM direct_sessions WHERE joined_at IS NULL AND created_at<?",
+                (now - DIRECT_SWEEP_GRACE_SECONDS * 1000,),
+            ).fetchall()]
+            for code in set(stale):
+                self._direct_forget(code)
+            # Signals of a session that vanished for any other reason.
+            self.db.execute(
+                "DELETE FROM direct_signals WHERE code NOT IN (SELECT code FROM direct_sessions)")
+            if stale:
+                self.db.commit()
+            return len(set(stale))
+
+    def direct_status(self) -> dict:
+        now = int(time.time() * 1000)
+        with self.lock:
+            count = self.db.execute(
+                "SELECT COUNT(*) FROM direct_sessions WHERE expires_at>?", (now,)
+            ).fetchone()[0]
+        return {"sessions": count}
 
     def status(self) -> dict:
         available = mem_available_bytes()
@@ -524,6 +768,7 @@ class Store:
                 "migrations": self.migrations,
                 "migratedBytes": self.migrated_bytes,
             },
+            "direct": self.direct_status(),
         }
 
 
@@ -541,7 +786,11 @@ class Handler(BaseHTTPRequestHandler):
 
     # ── plumbing ──
     def log_message(self, fmt, *args):
-        sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
+        line = fmt % args
+        # A Direct code is a capability: keep it out of the logs, along with
+        # anything a peer sends. Only the route and the status are recorded.
+        line = re.sub(r"(/api/direct/sessions/)\d{4}", r"\1****", line)
+        sys.stderr.write("%s - %s\n" % (self.address_string(), line))
 
     @property
     def store(self) -> Store:
@@ -710,7 +959,10 @@ class Handler(BaseHTTPRequestHandler):
             # client sees a clean error instead of a reset connection.
             if not self._body_consumed:
                 self._drain_body()
-            self.fail(err)
+            try:
+                self.fail(err)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the client left while its error was being written
         except BrokenPipeError:
             pass
         except Exception as err:  # noqa: BLE001
@@ -744,6 +996,21 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+    def read_json(self, limit: int = DIRECT_MAX_BODY) -> dict:
+        """Read a small JSON request body. Signalling and session bodies are tiny."""
+        length = self.headers.get("content-length")
+        size = int(length) if length and length.isdigit() else 0
+        if size > limit:
+            raise ApiError(413, "That request is too large.")
+        raw = self.rfile.read(size) if size else b""
+        self._body_read += len(raw)
+        self._body_consumed = True
+        try:
+            payload = json.loads(raw or b"{}")
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise ApiError(400, "Bad request.")
+        return payload if isinstance(payload, dict) else {}
+
     def api(self, method: str, path: str):
         store = self.store
         if path == "/api/config" and method == "GET":
@@ -752,9 +1019,89 @@ class Handler(BaseHTTPRequestHandler):
                 "partBytes": store.part_bytes,
                 "ttls": TTLS,
                 "kdfIterations": self.server.kdf_iterations,
+                # Capability flag. The Worker flavour omits it, so the shared
+                # frontend leaves Direct mode hidden there.
+                "direct": True,
             })
         if path == "/api/status" and method == "GET":
             return self.json(200, store.status())
+
+        # ── Direct mode: signalling only, never file bytes ──
+        if path == "/api/direct/config" and method == "GET":
+            return self.json(200, {
+                "enabled": True,
+                "stunUrls": self.server.stun_urls,
+                "chunkBytes": 64 * 1024,
+                "maxBytes": store.max_bytes,
+                "ttls": TTLS,
+                "kdfIterations": self.server.kdf_iterations,
+            })
+
+        if path == "/api/direct/sessions" and method == "POST":
+            wait = store.blocked("create", self.ip)
+            if wait:
+                raise ApiError(429, "Too many new sessions. Try again in a few minutes.",
+                               {"retry-after": str(wait)})
+            store.hit("create", self.ip)
+            payload = self.read_json()
+            ttl = payload.get("ttl")
+            ttl = int(ttl) if isinstance(ttl, int) and ttl in TTLS else 3600
+            return self.json(201, store.direct_create(ttl))
+
+        match = re.fullmatch(r"/api/direct/sessions/(\d{4})/join", path)
+        if match and method == "POST":
+            wait = store.blocked("miss", self.ip)
+            if wait:
+                raise ApiError(429, "Too many wrong codes. Try again in a few minutes.",
+                               {"retry-after": str(wait)})
+            self.read_json()
+            info = store.direct_join(match.group(1))
+            if not info:
+                store.hit("miss", self.ip)
+                raise ApiError(404, "No Direct session matches that code. "
+                                    "It may have ended, or the sender is using Server mode.")
+            return self.json(200, info)
+
+        match = re.fullmatch(r"/api/direct/sessions/(\d{4})/signal", path)
+        if match:
+            code = match.group(1)
+            token_value = self.headers.get("x-session-token", "")
+            if method == "POST":
+                wait = store.blocked("signal", self.ip)
+                if wait:
+                    raise ApiError(429, "Too many signalling messages.",
+                                   {"retry-after": str(wait)})
+                store.hit("signal", self.ip)
+                payload = self.read_json()
+                seq = store.direct_post(code, token_value,
+                                        str(payload.get("kind", "")), payload.get("data"))
+                return self.json(200, {"seq": seq})
+            if method == "GET":
+                since = 0
+                for pair in self.path.partition("?")[2].split("&"):
+                    key, _, value = pair.partition("=")
+                    if key == "since" and value.isdigit():
+                        since = int(value)
+                last, events = store.direct_events(code, token_value, since)
+                if not events:
+                    self.send_response(204)
+                    for key, value in SECURITY_HEADERS.items():
+                        self.send_header(key, value)
+                    self.end_headers()
+                    return None
+                return self.json(200, {"seq": last, "events": events})
+            raise ApiError(405, "Method not allowed.")
+
+        match = re.fullmatch(r"/api/direct/sessions/(\d{4})", path)
+        if match and method == "DELETE":
+            self.read_json()
+            if not store.direct_delete(match.group(1), self.headers.get("x-session-token", "")):
+                raise ApiError(403, "That Direct session token is not valid.")
+            self.send_response(204)
+            for key, value in SECURITY_HEADERS.items():
+                self.send_header(key, value)
+            self.end_headers()
+            return None
 
         if path == "/api/drops" and method == "POST":
             wait = store.blocked("create", self.ip)
@@ -972,7 +1319,14 @@ def main():
                         default=int(os.environ.get("FOURDOTS_SWEEP_SECONDS", "15")))
     parser.add_argument("--orphan-grace-seconds", type=int,
                         default=int(os.environ.get("FOURDOTS_ORPHAN_GRACE_SECONDS", "21600")))
+    parser.add_argument("--stun-urls",
+                        default=os.environ.get("FOURDOTS_STUN_URLS", DEFAULT_STUN_URLS))
     args = parser.parse_args()
+
+    # Direct mode is STUN only. A TURN URL here is ignored on purpose: 4dots
+    # never relays file content, and a relay would stop the transfer being direct.
+    stun_urls = [url.strip() for url in args.stun_urls.split(",")
+                 if url.strip().lower().startswith("stun:")]
 
     root = Path(args.data)
     root.mkdir(parents=True, exist_ok=True)
@@ -992,6 +1346,7 @@ def main():
     server.store = store
     server.public_dir = args.public
     server.kdf_iterations = int(os.environ.get("FOURDOTS_KDF_ITERATIONS", "600000"))
+    server.stun_urls = stun_urls
 
     stop = threading.Event()
     threading.Thread(target=sweeper, args=(store, stop, args.sweep_seconds), daemon=True).start()
@@ -1005,6 +1360,8 @@ def main():
     print(f"  orphan grace: {args.orphan_grace_seconds}s", flush=True)
     print(f"  max {args.max_mb} MB per drop, parts of {args.part_mb} MB, "
           f"PBKDF2 {server.kdf_iterations} rounds", flush=True)
+    print(f"  direct mode : signalling only, STUN {stun_urls or '(none: host candidates only)'}",
+          flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
