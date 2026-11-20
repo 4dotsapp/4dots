@@ -198,7 +198,7 @@ async def main():
             check("states ran through Connecting and Transferring",
                   "Connecting" in states and "Transferring" in states, states)
             check("the label is a real ICE classification",
-                  any(link in ("Local Wi-Fi", "Internet P2P") for link in links), links)
+                  any(link in ("Local Wi-Fi", "Local network", "Internet P2P") for link in links), links)
             peak = max(heaps) / 1e6 if heaps else 0
             check("receiver JS heap stays flat", peak < 40, f"peak {peak:.1f} MB, {len(heaps)} samples")
             check("measured speed was shown", any(s > 0 for s in speeds), speeds[-5:])

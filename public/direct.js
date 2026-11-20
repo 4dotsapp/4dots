@@ -393,9 +393,10 @@ function isPrivateAddress(address) {
 }
 
 /**
- * Reads the real selected candidate pair. "Local Wi-Fi" needs a private
- * address on a host candidate; mDNS names and srflx candidates cannot prove a
- * local path, so those are honestly reported as Internet P2P.
+ * Reads the real selected candidate pair. A host candidate is a direct local
+ * path: a visible private address says "Local Wi-Fi"; a masked mDNS/empty
+ * address still says "Local network" (it cannot name the network). srflx and
+ * prflx candidates leave the LAN, so those are "Internet P2P".
  */
 export async function describeConnection(pc) {
   let stats;
@@ -428,11 +429,24 @@ export async function describeConnection(pc) {
   if (local.candidateType === 'relay') {
     return { kind: 'relay', label: 'Not direct (relayed)', pair: pair.id };
   }
-  if (local.candidateType === 'host' && isPrivateAddress(local.address)) {
-    return { kind: 'local', label: 'Local Wi-Fi', pair: pair.id };
+  if (local.candidateType === 'host') {
+    const address = String(local.address || '').trim();
+    if (isPrivateAddress(address)) {
+      // A visible private address proves the local hop.
+      return { kind: 'local', label: 'Local Wi-Fi', pair: pair.id };
+    }
+    const looksLikeIp = /^[0-9a-f:.]+$/i.test(address) && !address.toLowerCase().endsWith('.local');
+    if (!address || !looksLikeIp) {
+      // Chrome hides host addresses behind mDNS names (".local") or empties
+      // them. The candidate is still a host candidate, so the traffic is
+      // direct and local, but the name cannot prove which network: say
+      // "Local network", not "Internet P2P".
+      return { kind: 'local', label: 'Local network', pair: pair.id };
+    }
+    // A publicly routable host address is direct, but not local.
+    return { kind: 'internet', label: 'Internet P2P', pair: pair.id };
   }
-  // srflx / prflx, a public host address, an mDNS ".local" name or no address:
-  // the path works, but nothing here proves it stayed on the local network.
+  // srflx / prflx: the path leaves the local network.
   return { kind: 'internet', label: 'Internet P2P', pair: pair.id };
 }
 
