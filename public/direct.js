@@ -8,8 +8,9 @@
 import { seal, unseal, unbundle } from './crypto.js';
 
 export const CHUNK = 64 * 1024;
-const HIGH_WATER = 1024 * 1024;     // pause sending above this
-const LOW_WATER = 256 * 1024;       // resume on bufferedamountlow
+const MAX_CHUNK = 256 * 1024;       // Chrome's SCTP maxMessageSize; older stacks cap lower
+const HIGH_WATER = 4 * 1024 * 1024; // pause sending above this
+const LOW_WATER = 1024 * 1024;      // resume on bufferedamountlow
 const WINDOW = 64;                  // chunks the receiver has not acknowledged yet
 const ACK_EVERY = 16;
 
@@ -167,7 +168,34 @@ export function pollSession({ code, token, since = 0, onEvents, onEnded, onError
 /** An RTCPeerConnection with STUN only. TURN is filtered out, never configured. */
 export function makePeer(stunUrls = []) {
   const iceServers = stunUrls.filter(isStunUrl).map((urls) => ({ urls }));
-  return new RTCPeerConnection({ iceServers });
+  return new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 4 });
+}
+
+/**
+ * The largest message this browser's SCTP stack accepts, capped at 256 KiB.
+ * Bigger messages mean fewer send() calls and less per-message overhead on a
+ * fast LAN, while 64 KiB remains the floor for older stacks.
+ */
+export function preferredChunk(pc) {
+  const max = Number(pc?.sctp?.maxMessageSize) || CHUNK;
+  return Math.max(CHUNK, Math.min(MAX_CHUNK, max));
+}
+
+/** Some older WebRTC stacks have no RTCPeerConnection.connectionState. */
+export function isPeerConnected(pc) {
+  if (!pc) return false;
+  if (pc.connectionState === 'connected') return true;
+  return pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed';
+}
+
+/** Old Safari expects description/candidate objects, not plain JSON. */
+export function remoteDescription(pc, init) {
+  const value = typeof RTCSessionDescription === 'function' ? new RTCSessionDescription(init) : init;
+  return pc.setRemoteDescription(value);
+}
+
+export function iceCandidate(init) {
+  return typeof RTCIceCandidate === 'function' ? new RTCIceCandidate(init) : init;
 }
 
 export function waitOpen(dc) {
@@ -217,7 +245,8 @@ function drain(dc, signal) {
  * receiver's credit window. Resolves once the receiver confirms it decrypted
  * the bundle; rejects on abort, disconnect or a receiver-side error.
  */
-export async function sendSealed(dc, sealed, { onSent = () => {}, signal } = {}) {
+export async function sendSealed(dc, sealed, { onSent = () => {}, signal, chunk = CHUNK } = {}) {
+  const size = Math.max(1024, Math.min(MAX_CHUNK, Number(chunk) || CHUNK));
   dc.bufferedAmountLowThreshold = LOW_WATER;
   let credit = WINDOW;
   let wake = null;
@@ -262,7 +291,7 @@ export async function sendSealed(dc, sealed, { onSent = () => {}, signal } = {})
 
   try {
     if (dc.readyState !== 'open') throw new Error('The other device disconnected.');
-    dc.send(JSON.stringify({ t: 'begin', size: sealed.size, chunk: CHUNK }));
+    dc.send(JSON.stringify({ t: 'begin', size: sealed.size, chunk: size }));
     let offset = 0;
     while (offset < sealed.size) {
       if (signal?.aborted) throw aborted(signal);
@@ -271,7 +300,7 @@ export async function sendSealed(dc, sealed, { onSent = () => {}, signal } = {})
         if (credit <= 0) continue;
       }
       await Promise.race([drain(dc, signal), failed]);
-      const end = Math.min(sealed.size, offset + CHUNK);
+      const end = Math.min(sealed.size, offset + size);
       const chunk = await sealed.slice(offset, end).arrayBuffer();
       if (dc.readyState !== 'open') throw new Error('The other device disconnected.');
       dc.send(chunk);
@@ -455,7 +484,7 @@ export function watchConnection(pc, onChange, interval = 2000) {
   let stopped = false;
   let last = '';
   const sample = async () => {
-    if (stopped || pc.connectionState === 'closed') return;
+    if (stopped || pc.signalingState === 'closed') return;
     const info = await describeConnection(pc);
     const key = `${info.kind}:${info.pair}`;
     if (key !== last) {

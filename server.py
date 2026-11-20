@@ -838,14 +838,50 @@ class Handler(BaseHTTPRequestHandler):
 
     ASSET_VERSION_RE = re.compile(
         r'((?:src|href)="/(?:app\.js|styles\.css|config\.js))(?:\?[^"]*)?(")')
+    IMPORT_RE = re.compile(r'(\bfrom\s*[\'"])(\./[^"\'?]+\.js)([\'"])')
+
+    def script_fingerprint(self, root: Path) -> str:
+        """One version for the ES-module graph: any JS change bumps app.js.
+
+        app.js is the only module index.html can version directly. It imports
+        direct.js, crypto.js and friends, so stamping app.js by its own mtime
+        alone would let an edge cache keep a module graph with a new app.js and
+        an old direct.js for hours.
+        """
+        digest = hashlib.sha256()
+        try:
+            files = sorted(root.glob("*.js"))
+        except OSError:
+            return "0"
+        for path in files:
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            digest.update(f"{path.name}:{stat.st_mtime_ns}:{stat.st_size};".encode())
+        return digest.hexdigest()[:16]
+
+    def version_module_imports(self, data: bytes, root: Path) -> bytes:
+        """Add a content-addressed ?v= to every local ES-module import."""
+        def stamp(match):
+            rel = match.group(2)[2:]  # strip "./"
+            try:
+                stat = (root / rel).stat()
+            except OSError:
+                return match.group(0)
+            return f"{match.group(1)}{match.group(2)}?v={stat.st_mtime_ns:x}-{stat.st_size:x}{match.group(3)}"
+
+        return self.IMPORT_RE.sub(stamp, data.decode("utf-8")).encode("utf-8")
 
     def version_assets(self, data: bytes, root: Path) -> bytes:
-        """Stamp /app.js and /styles.css with their current mtime and size.
+        """Stamp /app.js and /styles.css with a version that changes on deploy.
 
         index.html is never cached, so every deploy publishes new asset URLs
         automatically: no hand-bumped ?v= key is needed, even behind an edge
         cache that keeps assets for hours.
         """
+        js_version = self.script_fingerprint(root)
+
         def stamp(match):
             rel = match.group(1).split('"', 1)[1].lstrip("/")
             if rel == "config.js":
@@ -855,7 +891,7 @@ class Handler(BaseHTTPRequestHandler):
                 stat = (root / rel).stat()
             except OSError:
                 return match.group(0)
-            ver = f"{stat.st_mtime_ns:x}-{stat.st_size:x}"
+            ver = js_version if rel == "app.js" else f"{stat.st_mtime_ns:x}-{stat.st_size:x}"
             return f"{match.group(1)}?v={ver}{match.group(2)}"
 
         return self.ASSET_VERSION_RE.sub(stamp, data.decode("utf-8")).encode("utf-8")
@@ -866,6 +902,10 @@ class Handler(BaseHTTPRequestHandler):
         data = target.read_bytes()
         if target.suffix == ".html" and target.name == "index.html":
             data = self.version_assets(data, target.parent)
+        elif target.suffix == ".js":
+            # A module must never be cached under a URL that outlives its
+            # imports: stamp each local import with that file's own version.
+            data = self.version_module_imports(data, target.parent)
         ctype = {
             ".html": "text/html; charset=utf-8",
             ".js": "text/javascript; charset=utf-8",
@@ -879,7 +919,8 @@ class Handler(BaseHTTPRequestHandler):
             ".xml": "application/xml",
             ".webmanifest": "application/manifest+json",
         }.get(target.suffix, "application/octet-stream")
-        etag = (f'"{hashlib.sha256(data).hexdigest()[:16]}"' if target.suffix == ".html"
+        etag = (f'"{hashlib.sha256(data).hexdigest()[:16]}"'
+                if target.suffix in (".html", ".js")
                 else f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"')
         # Documents must revalidate on every load; assets may be reused for a
         # few minutes but are revalidated after that, so a deploy is never stuck

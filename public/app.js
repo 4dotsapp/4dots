@@ -1,7 +1,8 @@
 import { bundle, unbundle, seal, unseal } from './crypto.js';
 import {
-  createSession, decryptTransfer, describeConnection, directSupported, endSession, joinSession,
-  loadDirectConfig, makePeer, pollSession, postSignal, receiveSealed, sendSealed, watchConnection,
+  createSession, decryptTransfer, describeConnection, directSupported, endSession, iceCandidate,
+  isPeerConnected, joinSession, loadDirectConfig, makePeer, pollSession, postSignal, preferredChunk,
+  receiveSealed, remoteDescription, sendSealed, watchConnection,
 } from './direct.js';
 import { createSpeedometer } from './speedometer.js';
 import { ease, holdBackdrop, judgeFrames, motionBlur, prefersReducedMotion, rollDigits, tween } from './motion.js';
@@ -589,22 +590,25 @@ function attachPeer(d) {
     };
     postSignal(d.code, d.token, 'candidate', candidate).catch(() => {});
   });
-  pc.addEventListener('connectionstatechange', () => {
+  const onState = () => {
     if (state.direct !== d || d.failed) return;
-    if (pc.connectionState === 'connected') {
+    if (isPeerConnected(pc)) {
       clearTimeout(d.connectTimer);
       refreshLink(d);
       // The path is settled. A short grace lets the last candidates land, then
       // the poll stops so the other peer's cleanup cannot produce a 404.
       clearTimeout(d.pollGrace);
       d.pollGrace = setTimeout(() => d.poller?.stop(), 750);
-    } else if (pc.connectionState === 'failed') {
+    } else if (pc.connectionState === 'failed' || pc.iceConnectionState === 'failed') {
       failDirect(d, 'The two devices could not find a path to each other. Nothing was relayed.');
-    } else if (pc.connectionState === 'disconnected') {
+    } else if (pc.connectionState === 'disconnected' || pc.iceConnectionState === 'disconnected') {
       setDirectStatus(d.side, d.phase === 'transferring' ? 'Reconnecting…' : 'Connecting',
         'The direct connection dropped. Waiting for it to recover.');
     }
-  });
+  };
+  pc.addEventListener('connectionstatechange', onState);
+  // Old stacks only fire the ICE event; the connection-state event may not exist.
+  pc.addEventListener('iceconnectionstatechange', onState);
   d.stopWatch = watchConnection(pc, (info) => {
     if (state.direct !== d) return;
     d.link = info.label;
@@ -630,13 +634,13 @@ async function addCandidate(d, data) {
     usernameFragment: data.usernameFragment,
   };
   if (!d.pc.remoteDescription) { d.queued.push(candidate); return; }
-  try { await d.pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
+  try { await d.pc.addIceCandidate(iceCandidate(candidate)); } catch { /* stale candidate */ }
 }
 
 async function flushCandidates(d) {
   const queued = d.queued.splice(0);
   for (const candidate of queued) {
-    try { await d.pc.addIceCandidate(candidate); } catch { /* stale candidate */ }
+    try { await d.pc.addIceCandidate(iceCandidate(candidate)); } catch { /* stale candidate */ }
   }
 }
 
@@ -648,7 +652,7 @@ function armConnectWatchdog(d, seconds = 20) {
   clearTimeout(d.connectTimer);
   d.connectTimer = setTimeout(() => {
     if (state.direct !== d || d.failed || d.finished) return;
-    if (d.pc?.connectionState === 'connected') return;
+    if (isPeerConnected(d.pc)) return;
     failDirect(d, 'The two devices could not reach each other in time. No relay was used, so use Server mode instead.');
   }, seconds * 1000);
 }
@@ -673,6 +677,7 @@ function failDirect(d, message) {
 }
 
 async function beginSending(d) {
+  clearTimeout(d.connectTimer);
   d.phase = 'transferring';
   setDirectStatus('send', 'Transferring', `${d.link || 'Connected'} · device to device`);
   refreshLink(d);
@@ -680,6 +685,7 @@ async function beginSending(d) {
   try {
     await sendSealed(d.dc, d.sealed, {
       signal: d.abort.signal,
+      chunk: preferredChunk(d.pc),
       onSent: (sent, total) => { d.sentBytes = sent; d.meter.setBytes(sent, total); },
     });
     if (state.direct !== d) return;
@@ -687,6 +693,9 @@ async function beginSending(d) {
     finishSampling(d);
     await refreshLink(d);
     d.finished = true;
+    // Clear the composer before showing Done: a fast "New drop" click must
+    // never land in the window where the previous files are still attached.
+    clearCompose();
     d.meter.setBytes(d.total, d.total);
     d.meter.setDone();
     setDirectStatus('send', 'Done', 'Sent directly. Nothing was stored on the server.');
@@ -694,8 +703,6 @@ async function beginSending(d) {
     directEls.send.actions.hidden = true;
     directEls.send.subactions.hidden = true;
     directEls.send.newButton.hidden = false;
-    d.finished = true;
-    clearCompose();
     cleanupDirect(d);
   } catch (err) {
     if (err.cancelled || err.name === 'AbortError' || state.direct !== d) return;
@@ -715,7 +722,7 @@ function handleSenderSignal(d, event) {
     d.phase = 'connecting';
     return (async () => {
       try {
-        await d.pc.setRemoteDescription({ type: 'answer', sdp: event.data.sdp });
+        await remoteDescription(d.pc, { type: 'answer', sdp: event.data.sdp });
         await flushCandidates(d);
       } catch (err) {
         failDirect(d, 'The handshake failed. Try again, or use Server mode.');
@@ -801,7 +808,7 @@ function handleReceiverSignal(d, event) {
     d.answered = true;
     return (async () => {
       try {
-        await d.pc.setRemoteDescription({ type: 'offer', sdp: event.data.sdp });
+        await remoteDescription(d.pc, { type: 'offer', sdp: event.data.sdp });
         await flushCandidates(d);
         const answer = await d.pc.createAnswer();
         await d.pc.setLocalDescription(answer);
@@ -851,6 +858,7 @@ function setupReceiverChannel(d) {
   setDirectStatus('receive', 'Connecting', d.link ? `${d.link} · opening the data channel` : 'Opening the data channel');
   d.dc.addEventListener('open', () => {
     if (state.direct !== d) return;
+    clearTimeout(d.connectTimer);
     d.phase = 'transferring';
     refreshLink(d);
     setDirectStatus('receive', 'Transferring', `${d.link || 'Connected'} · decrypting on your device`);
@@ -1455,6 +1463,9 @@ card.addEventListener('click', (event) => {
       break;
     case 'direct-new':
       state.direct = null;
+      renderDirectCode('••••');
+      setDirectStatus('send', 'Waiting for the recipient',
+        'Keep this tab open. Both devices must stay online.');
       go('send', 'compose', { dir: -1 });
       refreshCompose();
       break;
